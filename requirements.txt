@@ -1,0 +1,26 @@
+# Python toolchain for codegen/ and analysis/.
+# Install into a venv that is ALSO visible to colcon at build time:
+#   python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+
+# --- codegen (pinned: solver C output must be byte-reproducible in CI) ---
+casadi==3.6.5
+numpy==1.26.4
+scipy==1.13.1
+# acados_template is installed from the acados source tree, NOT PyPI:
+#   pip install -e ${ACADOS_SOURCE_DIR}/interfaces/acados_template
+# Pinned acados commit is recorded in codegen/ACADOS_COMMIT.
+
+# --- analysis ---
+matplotlib==3.9.0
+pandas==2.2.2
+jupyter==1.0.0
+seaborn==0.13.2
+
+# --- rosbag reading for analysis notebooks ---
+# rosbags is a pure-python reader; avoids needing a sourced ROS env in Jupyter.
+rosbags==0.9.22
+
+# --- dev ---
+pytest==8.2.2
+black==24.4.2
+flake8==7.1.0

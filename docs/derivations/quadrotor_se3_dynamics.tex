@@ -1,0 +1,85 @@
+% SKELETON — structure only, no mathematics written.
+% See IMPLEMENTATION_GUIDE.md §13.1.
+%
+% Build:  latexmk -pdf quadrotor_se3_dynamics.tex
+%
+% This document is the authority for the equations implemented in
+%   uav_mpc/src/quadrotor_dynamics.cpp   and   codegen/quadrotor_model.py.
+% If the code and this file disagree, this file is wrong until proven otherwise — but they
+% must not disagree in a commit.
+
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm,bm,geometry,hyperref,cleveref,booktabs}
+\geometry{margin=1in}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\SO}{\mathrm{SO}(3)}
+\newcommand{\SE}{\mathrm{SE}(3)}
+\newcommand{\skewm}[1]{\left[#1\right]_\times}
+
+\title{Twelve-State Quadrotor Dynamics on $\SE$}
+\author{Ali-Eimaan}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+% TODO(deepseek): 4 sentences. What is derived, under what assumptions, and which file
+% implements it.
+\end{abstract}
+
+\section{Frames and notation}
+% TODO(deepseek):
+%  - world ENU, body FLU, both right-handed
+%  - R \in SO(3) maps body to world
+%  - Hamilton quaternion (w,x,y,z), q \otimes convention
+%  - the hat/vee maps and the skew operator
+%  - a table of every symbol with units. Do this properly; it is what makes the document
+%    checkable.
+
+\section{Assumptions}
+% TODO(deepseek): rigid body; symmetric mass distribution (diagonal J) with a note on when it
+% fails; rotors as pure force+torque generators with a first-order lag; linear rotor drag;
+% no ground effect; no blade flapping; flat non-rotating Earth. State which assumptions the
+% aggressive figure-8 actually stresses.
+
+\section{Translational dynamics}
+% TODO(deepseek): Newton's second law in the world frame, thrust rotated from the body frame,
+% the drag term R D R^T (v - v_wind), gravity.
+
+\section{Rotational dynamics}
+% TODO(deepseek): Euler's equation J \dot\omega + \omega \times J\omega = \tau.
+
+\section{Attitude kinematics}
+\subsection{Quaternion}
+% TODO(deepseek): \dot q = 1/2 q \otimes [0, \omega]; derive the 4x4 Omega(\omega) matrix form
+% used in the code; prove the norm is preserved by the exact flow and note that the RK4
+% discretisation does not preserve it exactly (hence the renormalisation in step()).
+
+\subsection{ZYX Euler angles}
+% TODO(deepseek): the T(\Theta) matrix, its determinant 1/cos(\theta), and the singularity.
+
+\section{Control allocation}
+% TODO(deepseek): the quad-X geometry figure (TikZ), motor numbering matching PX4, the 4x4
+% allocation matrix, its inverse in closed form, and the rank condition.
+
+\section{Full state-space model}
+% TODO(deepseek): assemble x = [p, v, q, \omega] \in R^13 (and the R^12 Euler variant),
+% u = [T_1..T_4], and write f(x,u) as a single displayed equation. Cross-reference the exact
+% lines of quadrotor_dynamics.cpp and quadrotor_model.py that implement it.
+
+\section{Linearisation about hover}
+% TODO(deepseek): A, B at hover trim; the controllability check; the natural time scales that
+% justify the 50 ms discretisation and the 1 s horizon. This section is what makes the
+% horizon choice a decision rather than a guess.
+
+\section{Baseline: geometric tracking control}
+% TODO(deepseek): state the Lee-Leok-McClamroch control law in this notation, with the
+% attitude error e_R = 1/2 (R_d^T R - R^T R_d)^\vee. Used as the comparison baseline in the
+% README. Cite the theorem; do not restate its proof.
+
+\bibliographystyle{plain}
+% TODO(deepseek): \bibliography{refs} with a real refs.bib.
+
+\end{document}

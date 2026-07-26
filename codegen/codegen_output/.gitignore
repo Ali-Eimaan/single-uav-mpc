@@ -1,0 +1,7 @@
+# Generated acados C code. Reproducible from codegen/, so nothing here is tracked except this
+# file and the small public headers under include/ (kept for IDE/intellisense and so
+# acados_wrapper.cpp resolves without a build).
+*
+!.gitignore
+!include/
+!include/*.h

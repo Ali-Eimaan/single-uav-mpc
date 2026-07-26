@@ -1,0 +1,30 @@
+# SKELETON — placeholder RViz config referenced by launch/sitl.launch.py.
+#
+# TODO(deepseek): replace this file wholesale with a real config SAVED FROM RVIZ, not
+# hand-written. Set up the view once and use File > Save Config As. Hand-edited .rviz files
+# are a reliable source of silent load failures.
+#
+# The saved config must contain:
+#   - Fixed Frame: map   (ENU; the node publishes its paths in this frame)
+#   - Path display on /nmpc_node/predicted_path   (colour: orange, width 0.02)
+#   - Path display on /nmpc_node/reference_path   (colour: green, dashed if available)
+#   - TF display showing map -> base_link
+#   - Grid, 0.5 m cells, 20 x 20
+#   - Camera: an isometric view framing a 6 x 6 x 3 m volume centred on the origin, chosen so
+#     the whole figure-8 is visible without panning — this view is what ends up in the README GIF
+#
+# Until then, `rviz:=false` in sitl.launch.py, or pass your own config with -d.
+
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera

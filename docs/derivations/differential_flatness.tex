@@ -1,0 +1,65 @@
+% SKELETON — structure only, no mathematics written.
+% See IMPLEMENTATION_GUIDE.md §13.2.
+%
+% Implements: TrajectoryGenerator::flatToStateInput().
+% This is Mellinger & Kumar's result restated in YOUR notation, with the algebra shown. The
+% point of writing it out is that the reader can check your code against it line by line —
+% so every intermediate step must be present, not just the final formulas.
+
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm,bm,geometry,hyperref,cleveref}
+\geometry{margin=1in}
+
+\title{Differential Flatness of the Quadrotor and the Flat-Output-to-State Map}
+\author{Ali-Eimaan}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Statement}
+% TODO(deepseek): define differential flatness; state that sigma = (x, y, z, psi) is a flat
+% output for the quadrotor model of quadrotor_se3_dynamics.tex; name the conditions under
+% which the claim holds (thrust strictly positive, i.e. no free fall).
+
+\section{Recovering attitude}
+% TODO(deepseek):
+%   t = \ddot p + g e_3  (required specific force, world frame)
+%   z_B = t / ||t||
+%   x_C = [\cos\psi, \sin\psi, 0]^T
+%   y_B = (z_B \times x_C) / ||z_B \times x_C||,   x_B = y_B \times z_B
+%   R = [x_B, y_B, z_B]
+% Include the degenerate case ||z_B \times x_C|| \to 0 (vertical yaw axis alignment) and
+% state what the implementation does there.
+
+\section{Recovering thrust}
+% TODO(deepseek): T = m ||t||, and the drag-corrected version when the model includes rotor
+% drag (Faessler et al.). Note explicitly that ignoring drag here is a modelling error that
+% shows up as a systematic lag on fast trajectories — this is the honest caveat.
+
+\section{Recovering body rates from jerk}
+% TODO(deepseek): differentiate m \ddot p = T R e_3 - ... once; project onto x_B, y_B, z_B to
+% get \omega_x, \omega_y and \dot T. Get \omega_z from the yaw-rate constraint. Show the
+% algebra; the projection step is where implementations go wrong.
+
+\section{Recovering angular acceleration from snap}
+% TODO(deepseek): differentiate again; solve for \dot\omega; then \tau = J\dot\omega +
+% \omega \times J\omega, and u = A^{-1}[T, \tau]^T.
+
+\section{Feasibility}
+% TODO(deepseek): the flat trajectory is dynamically feasible iff the recovered u lies in the
+% actuator set. Give the inequality that isDynamicallyFeasible() checks, and work one concrete
+% example: the 3 m / 5 s figure-8 on the X500, showing the peak per-rotor thrust against the
+% 8.55 N limit.
+
+\section{Minimum-snap trajectory generation}
+% TODO(deepseek): why minimising snap is the natural objective given the above (snap enters
+% the input); the QP; the C^4 continuity constraints; the closed-form solution structure.
+% Cite Mellinger & Kumar (2011) and Richter, Bry & Roy (2013) for the unconstrained
+% reformulation.
+
+\section{Correspondence to the implementation}
+% TODO(deepseek): a table mapping each equation number to the function and line in
+% trajectory_generator.cpp. Keep it updated — a stale table is worse than none.
+
+\end{document}

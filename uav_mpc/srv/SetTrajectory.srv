@@ -1,0 +1,11 @@
+# Swap the active reference trajectory at runtime.
+# Rejected unless the controller is in STREAMING or TRACKING and the first sample of the new
+# trajectory is within `max_jump_on_switch` (nmpc_params.yaml) of the current position.
+
+TrajectorySpec spec
+bool restart_clock            # true => reset trajectory time to 0; false => keep phase
+---
+bool success
+string message                # human-readable rejection reason when success is false
+float64 expected_duration     # [s]; inf for periodic types
+bool dynamically_feasible     # false => accepted, but the envelope check flagged it

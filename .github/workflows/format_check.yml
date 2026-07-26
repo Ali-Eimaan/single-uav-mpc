@@ -1,0 +1,67 @@
+# SKELETON — job structure defined, steps marked TODO. See IMPLEMENTATION_GUIDE.md §14.2.
+#
+# Fast, no-build lint gate. Should finish in under two minutes so it is the first thing a
+# contributor sees fail.
+
+name: format check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpp:
+    name: C++ (clang-format / cpplint / uncrustify)
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-ros-base
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(deepseek): apt install ros-jazzy-ament-cmake-clang-format
+      #                              ros-jazzy-ament-cmake-cpplint
+      #                              ros-jazzy-ament-cmake-uncrustify
+      # TODO(deepseek): run each ament linter over uav_mpc/{src,include,test},
+      # with --config .clang-format for clang-format. Fail on any diff, and print the diff so
+      # the fix is copy-pasteable.
+
+  python:
+    name: Python (black / flake8)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # TODO(deepseek): pip install black==24.4.2 flake8==7.1.0
+      # TODO(deepseek): black --check --diff codegen/ analysis/ uav_mpc/launch/
+      #                                      uav_mpc/test/
+      # TODO(deepseek): flake8 with a setup.cfg (max-line-length 100, ignore E203/W503).
+      #                 Add that setup.cfg — do not pass the flags inline, or the local run
+      #                 and the CI run will drift apart.
+
+  yaml-and-xml:
+    name: YAML / package.xml
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(deepseek): yamllint over config/ and params/ with a relaxed line-length rule;
+      # xmllint --schema against the package format 3 XSD.
+
+  docs:
+    name: Docs are not stale
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(deepseek): a small script that fails if any file still contains "TODO(deepseek)"
+      # once the repo is tagged v1.0. Until then, invert it: report the count as a job summary
+      # so the remaining work is visible on every PR. This is a progress meter, not a gate.

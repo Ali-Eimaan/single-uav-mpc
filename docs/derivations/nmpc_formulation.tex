@@ -1,0 +1,65 @@
+% SKELETON — structure only, no mathematics written.
+% See IMPLEMENTATION_GUIDE.md §13.3.
+%
+% Implements: codegen/generate_acados_solver.py + uav_mpc/src/acados_wrapper.cpp.
+
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm,bm,geometry,hyperref,cleveref,booktabs,algorithm2e}
+\geometry{margin=1in}
+
+\title{Real-Time Nonlinear MPC Formulation for Quadrotor Trajectory Tracking}
+\author{Ali-Eimaan}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Optimal control problem}
+% TODO(deepseek): write the OCP exactly as generated:
+%   min over U, X:  sum_{k=0}^{N-1} ||y_k(x_k,u_k) - y^ref_k||^2_W + ||y_N(x_N) - y^ref_N||^2_{W_N}
+%   s.t. x_0 = \hat x,  x_{k+1} = F(x_k, u_k),  u \in [u_min, u_max],  |omega| <= omega_max (soft)
+% Define every symbol. State N = 20, T_f = 1 s, dt = 50 ms, and justify each.
+
+\section{Cost design}
+\subsection{Why nonlinear least squares}
+% TODO(deepseek): the attitude error is not affine in the state; a LINEAR_LS cost on the raw
+% quaternion penalises the wrong thing near a 180-degree error and suffers unwinding. Show the
+% residual actually used: the vector part of q_ref^{-1} \otimes q with the sign convention.
+
+\subsection{Weight selection}
+% TODO(deepseek): the Bryson-rule starting point (weight = 1 / max_acceptable_deviation^2)
+% with the table of max acceptable deviations that produced the numbers in
+% config/nmpc_params.yaml. This turns the weights from magic constants into a documented
+% decision.
+
+\section{Constraints}
+% TODO(deepseek): per-rotor thrust bounds (hard, always feasible by construction); body-rate
+% bounds (soft, L2 slack) and why softening them is necessary under RTI; the deliberate
+% absence of state position constraints in v0.1 and where CBF-based ones will enter
+% (the thesis hook).
+
+\section{Discretisation}
+% TODO(deepseek): ERK4 with one step per interval; the local truncation error at dt = 50 ms
+% for the fastest mode in the linearisation; a table comparing ERK4 vs IRK cost and accuracy
+% that justifies the choice.
+
+\section{Real-time iteration}
+% TODO(deepseek): the RTI scheme (Diehl et al.); the preparation/feedback split; what the
+% single SQP iteration buys and what it costs; the standard suboptimality/contraction
+% statement WITH its hypotheses, and an explicit note on which hypotheses are not verified here.
+
+\section{Solver}
+% TODO(deepseek): partial condensing (N_cond = 5) + HPIPM; why not full condensing at this
+% horizon; the measured solve-time distribution referenced from media/solve_time_histogram.png.
+
+\section{Warm starting and recovery}
+% TODO(deepseek): the shift strategy, and the reset-to-hover recovery on infeasibility. State
+% the guarantee honestly: this is a heuristic, not a recursive-feasibility argument.
+
+\section{What this formulation does not guarantee}
+% TODO(deepseek): no terminal set, hence no nominal stability certificate; soft state
+% constraints can be violated; no robustness margin against the unmodelled drag. Write this
+% section properly — a candidate who states the limits of their own controller reads as a
+% researcher, one who does not reads as a student.
+
+\end{document}

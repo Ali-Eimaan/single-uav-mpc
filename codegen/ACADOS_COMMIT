@@ -1,0 +1,9 @@
+# Pinned acados revision. generate_acados_solver.py refuses to run against anything else.
+#
+# TODO(deepseek): replace the placeholder below with the full 40-character SHA of the acados
+# commit you actually generate and test against, and record the release tag it corresponds to.
+# Do NOT pin a branch name — the whole point is reproducibility.
+#
+# commit:
+0000000000000000000000000000000000000000
+# tag: v0.4.x  (TODO: record the real tag)

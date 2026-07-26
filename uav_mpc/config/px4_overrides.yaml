@@ -1,0 +1,53 @@
+# PX4 parameters that MUST be set for offboard attitude control to behave as this controller
+# assumes. Applied to SITL automatically by launch/sitl.launch.py (via the PX4 shell), and
+# listed here as a checklist for real hardware (docs/HARDWARE_BRINGUP.md).
+#
+# SKELETON — the parameter NAMES and the rationale are correct for PX4 v1.15/v1.16.
+# TODO(deepseek): verify each default against the PX4 version pinned in
+# .github/workflows/docker_smoke_test.yml before trusting the values.
+
+px4_parameters:
+
+  # --- uXRCE-DDS bridge ---------------------------------------------------------------------
+  UXRCE_DDS_CFG: 0          # 0 = disabled on hardware serial; SITL uses UDP (set by the sim)
+  UXRCE_DDS_DOM_ID: 0       # must equal ROS_DOMAIN_ID
+  UXRCE_DDS_KEY: 1
+
+  # --- offboard ------------------------------------------------------------------------------
+  COM_OF_LOSS_T: 0.5        # [s] offboard signal loss -> failsafe. Our loop is 100 Hz.
+  COM_OBL_RC_ACT: 2         # offboard loss action: 2 = Hold (safest for bench testing)
+  COM_RCL_EXCEPT: 4         # bit 2 = allow offboard without RC (CI/SITL only!)
+
+  # --- thrust model --------------------------------------------------------------------------
+  # normalise_thrust() in nmpc_node assumes a LINEAR map unless THR_MDL_FAC != 0.
+  THR_MDL_FAC: 0.0          # keep 0 for SITL; real frames often want 0.3-0.7
+  MPC_THR_HOVER: 0.62       # MUST match `px4_hover_thrust` in nmpc_params.yaml
+  MPC_THR_MIN: 0.06
+  MPC_THR_MAX: 0.95
+
+  # --- attitude inner loop -------------------------------------------------------------------
+  # The NMPC outputs an attitude setpoint; PX4's attitude + rate loops must be FAST relative to
+  # the 100 Hz outer loop or the timescale separation assumption of the flatness map breaks.
+  MC_ROLL_P: 8.0
+  MC_PITCH_P: 8.0
+  MC_YAW_P: 3.5
+  MC_ROLLRATE_P: 0.15
+  MC_PITCHRATE_P: 0.15
+  MC_YAWRATE_P: 0.2
+  MC_AIRMODE: 0             # 0 = disabled; enable only after the frame is well tuned
+
+  # --- limits (must be >= what the trajectory demands) ---------------------------------------
+  MPC_TILTMAX_AIR: 45.0     # [deg]
+  MPC_MAN_TILT_MAX: 45.0    # [deg]
+  MPC_XY_VEL_MAX: 12.0      # [m/s]
+  MPC_Z_VEL_MAX_UP: 3.0     # [m/s]
+  MPC_Z_VEL_MAX_DN: 1.5     # [m/s]
+
+  # --- estimator ------------------------------------------------------------------------------
+  EKF2_EV_CTRL: 15          # enable external vision fusion (mocap) — hardware only
+  EKF2_HGT_REF: 0           # 0 = baro, 3 = vision. Set to 3 indoors with mocap.
+  EKF2_EV_DELAY: 20.0       # [ms] mocap latency; measure it, do not guess
+
+  # --- logging ---------------------------------------------------------------------------------
+  SDLOG_PROFILE: 3          # default + high-rate attitude, for post-flight analysis
+  SDLOG_MODE: 1             # log from boot; needed to catch pre-arm issues

@@ -1,0 +1,36 @@
+# SKELETON — keys final, values are the demo defaults used by launch/figure8.launch.py.
+# Mirrors uav_mpc::TrajectoryParams and msg/TrajectorySpec.msg.
+
+/**:
+  ros__parameters:
+    trajectory:
+      type: "figure8"             # hover | figure8 | lemniscate | circle | waypoints | step
+
+      center: [0.0, 0.0, 0.0]     # [m] ENU; z is ignored, `altitude` wins
+      altitude: 1.5               # [m] AGL
+
+      amplitude_x: 2.0            # [m] half-width of the 8
+      amplitude_y: 2.0            # [m] half-height
+      amplitude_z: 0.0            # [m] vertical bob; 0 => planar
+
+      period: 8.0                 # [s] one full lap. 8 s at A=2 m peaks ~3.1 m/s, ~4.9 m/s^2.
+      ramp_in_time: 3.0           # [s] C^4 blend hover -> orbit
+
+      yaw_follows_velocity: true
+      fixed_yaw: 0.0              # [rad], used when yaw_follows_velocity is false
+
+      # Envelope used for the feasibility check and for waypoint time allocation.
+      max_velocity: 5.0           # [m/s]
+      max_acceleration: 8.0       # [m/s^2]
+
+      # TYPE_WAYPOINTS only. Flat list of x,y,z triples; segment_times may be empty.
+      waypoints: []
+      segment_times: []
+
+      # --- aggressive preset, for the README GIF -------------------------------------------
+      # Uncomment to reproduce media/figure8.gif (peaks ~6 m/s, ~15 m/s^2, ~35 deg bank):
+      # amplitude_x: 3.0
+      # amplitude_y: 3.0
+      # period: 5.0
+      # max_velocity: 8.0
+      # max_acceleration: 18.0

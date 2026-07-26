@@ -1,0 +1,75 @@
+# SKELETON — the keys and units are final; the weight VALUES are placeholders that must be
+# re-tuned once the solver runs. See docs/TUNING_GUIDE.md and IMPLEMENTATION_GUIDE.md §9.1.
+#
+# Every key here is declared as a ROS parameter by NmpcNode::declareParameters(). Keys marked
+# [read-only] are baked into the generated solver and cannot be changed without re-running
+# codegen/generate_acados_solver.py.
+
+/**:
+  ros__parameters:
+
+    # ---------------------------------------------------------------------------------------
+    # Loop timing
+    # ---------------------------------------------------------------------------------------
+    control_rate_hz: 100.0          # NMPC + setpoint publish rate
+    state_timeout_s: 0.1            # odometry older than this => Failsafe
+    latency_compensation_s: 0.02    # forward-integrate x0 by this before solving; 0 disables
+
+    # ---------------------------------------------------------------------------------------
+    # OCP structure  [read-only — must match codegen]
+    # ---------------------------------------------------------------------------------------
+    horizon_steps: 20               # N
+    horizon_time: 1.0               # Tf [s]  => dt = 50 ms
+    attitude_rep: "quaternion"      # "quaternion" (nx=13) | "euler" (nx=12)
+
+    # ---------------------------------------------------------------------------------------
+    # Cost weights. These weight the COST RESIDUAL, not the raw state — the attitude enters
+    # as the 3-vector part of the error quaternion, so the state residual is 12-dimensional
+    # even though nx = 13. Residual order:
+    #   [px py pz | vx vy vz | e_qx e_qy e_qz | wx wy wz]  (+ [T1..T4] for the stage cost)
+    # Starting values come from the Bryson rule, w_i = 1 / dev_max_i^2, with the deviation
+    # table in docs/TUNING_GUIDE.md §1. TODO(deepseek): not yet tuned against a real solve.
+    # ---------------------------------------------------------------------------------------
+    q_diag:   [200.0, 200.0, 400.0,    # position        [1/m^2]
+                10.0,  10.0,  20.0,    # velocity        [1/(m/s)^2]
+                50.0,  50.0,  20.0,    # attitude error  (vector part, dimensionless)
+                 1.0,   1.0,   1.0]    # body rates      [1/(rad/s)^2]
+
+    r_diag:   [0.5, 0.5, 0.5, 0.5]     # per-rotor thrust deviation from the reference [1/N^2]
+
+    q_terminal_diag: [400.0, 400.0, 800.0,
+                       20.0,  20.0,  40.0,
+                      100.0, 100.0,  40.0,
+                        2.0,   2.0,   2.0]
+
+    # ---------------------------------------------------------------------------------------
+    # Solver behaviour
+    # ---------------------------------------------------------------------------------------
+    max_sqp_iterations: 1           # RTI
+    solve_time_budget_ms: 5.0       # exceeded => Timeout status, previous input held
+    max_consecutive_failures: 5     # exceeded => Failsafe
+    warm_start: true
+    shift_on_warm_start: true
+
+    # ---------------------------------------------------------------------------------------
+    # Airframe + PX4 interface
+    # ---------------------------------------------------------------------------------------
+    airframe_params_path: ""        # absolute path; the launch files fill this in
+    px4_hover_thrust: 0.62          # PX4 MPC_THR_HOVER for this frame; see px4_overrides.yaml
+    px4_thrust_model_factor: 0.0    # PX4 THR_MDL_FAC; 0 => linear thrust map
+    auto_arm: false                 # true only in SITL / CI
+
+    # ---------------------------------------------------------------------------------------
+    # Mission
+    # ---------------------------------------------------------------------------------------
+    takeoff_altitude_m: 1.5
+    takeoff_speed_mps: 0.5
+    landing_speed_mps: 0.3
+    max_jump_on_switch_m: 1.0       # reject SetTrajectory if the new start is further away
+
+    # ---------------------------------------------------------------------------------------
+    # Diagnostics
+    # ---------------------------------------------------------------------------------------
+    publish_visualisation: true
+    status_publish_rate_hz: 100.0   # <= control_rate_hz; decimated internally
+    log_solve_time_warn_ms: 2.0

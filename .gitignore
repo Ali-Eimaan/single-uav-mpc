@@ -1,0 +1,40 @@
+# ---- ROS 2 / colcon ----
+build/
+install/
+log/
+.colcon/
+
+# ---- acados generated code ----
+# Generated C is reproducible from codegen/, so it is not tracked.
+# Exception: the public headers checked in for IDE/intellisense convenience.
+codegen/codegen_output/**
+!codegen/codegen_output/.gitignore
+!codegen/codegen_output/include/
+!codegen/codegen_output/include/**/*.h
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# ---- Analysis artifacts ----
+analysis/output/
+*.csv
+*.bag
+*.db3
+*.mcap
+rosbag2_*/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+compile_commands.json
+
+# ---- Media (large binaries are committed deliberately; keep raw captures out) ----
+media/raw/
+*.mp4

@@ -1,0 +1,76 @@
+# SKELETON — job structure defined, steps marked TODO. See IMPLEMENTATION_GUIDE.md §14.3.
+#
+# THE differentiating CI job: PX4 SITL + Gazebo + the NMPC node actually fly a hover, headless,
+# inside the container, and the job asserts on the resulting tracking error. Most candidate
+# repos do not build; this one flies autonomously in CI.
+#
+# Expect this to be the flakiest workflow in the repo. Budget real effort for making it
+# deterministic (fixed seeds, lockstep sim time, generous but bounded timeouts) — a smoke test
+# that fails 30% of the time trains everyone to ignore red, which is worse than not having it.
+
+name: docker smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"   # nightly, to catch upstream PX4/Gazebo drift
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # TODO(deepseek): pin these to the exact versions you test against, and reference the same
+  # values from colcon_build.yml (px4_msgs must match PX4).
+  PX4_VERSION: "v1.15.4"
+  GZ_VERSION: "harmonic"
+  ROS_DISTRO: "jazzy"
+
+jobs:
+  hover:
+    name: 10 s autonomous hover in SITL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO(deepseek): build (or pull) the sim image. A committed docker/Dockerfile.sitl that
+      # layers PX4 + Gazebo Harmonic + acados onto ros:jazzy is the maintainable option;
+      # publish it to GHCR from a separate manually-triggered workflow so this job only pulls.
+      # Building PX4 from source on every push will make this job take 40 minutes.
+
+      # TODO(deepseek): run the container with the workspace mounted, then inside it:
+      #   1. colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+      #   2. launch: ros2 launch uav_mpc sitl.launch.py headless:=true auto_arm:=true \
+      #        trajectory:=hover rviz:=false
+      #   3. record a bag of /nmpc_node/status and /fmu/out/vehicle_local_position
+      #   4. wait for takeoff, then hold for 10 s of steady-state
+      #   5. SIGINT everything and collect the bag
+
+      # TODO(deepseek): assert, in a standalone script (scripts/assert_hover.py) so it can be
+      # run locally too:
+      #   - the controller reached STATE_TRACKING within 20 s
+      #   - RMS position error over the 10 s window < 0.15 m
+      #   - max position error < 0.30 m
+      #   - zero solver failures (SolverDiagnostics.status != SUCCESS count == 0)
+      #   - p99 solve time < 5 ms (relaxed vs the unit test: a CI runner is not a flight computer)
+      #   - the vehicle never dropped below 0.5 * takeoff_altitude
+      # Print every metric even on success — the numbers in the job log are the evidence.
+
+      # TODO(deepseek): always() upload the bag, the PX4 ulog and the node logs as artifacts.
+      # When this job fails you will have exactly one shot at diagnosing it from the artifacts.
+
+  figure8:
+    name: 2 laps of a figure-8 in SITL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # TODO(deepseek): same shape as `hover`, with figure8.launch.py and looser thresholds
+    # (RMS < 0.25 m). Run on schedule + workflow_dispatch only, not on every push — keep the
+    # per-PR feedback loop short.
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(deepseek)
