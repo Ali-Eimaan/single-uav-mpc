@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — test bodies not implemented. See IMPLEMENTATION_GUIDE.md §10.1.
+// SKELETON — test bodies not implemented. See .deepseek/10_TESTS.md §10.1.
 //
 // THE gate test. CI fails if the NMPC solve regresses past the real-time budget, which is the
 // single claim this repo is making. Keep it honest:

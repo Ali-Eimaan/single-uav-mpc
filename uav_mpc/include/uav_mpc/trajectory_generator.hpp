@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See IMPLEMENTATION_GUIDE.md §5.
+// SKELETON — declarations only. See .deepseek/05_TRAJECTORY.md §5.
 //
 // Minimum-snap polynomial trajectory generation (Mellinger & Kumar, ICRA 2011) plus closed-form
 // analytic primitives (figure-8 / lemniscate / circle). Produces a flat-output reference

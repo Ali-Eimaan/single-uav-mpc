@@ -1,4 +1,4 @@
-"""SKELETON — the README demo. See IMPLEMENTATION_GUIDE.md §8.3.
+"""SKELETON — the README demo. See .deepseek/08_LAUNCH.md §8.3.
 
 Includes sitl.launch.py, then commands a figure-8 once the vehicle is hovering, and records a
 rosbag of everything the analysis notebooks need.

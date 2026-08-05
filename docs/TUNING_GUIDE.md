@@ -1,6 +1,6 @@
 # Tuning guide
 
-**SKELETON — outline only.** See `IMPLEMENTATION_GUIDE.md` §13.4. Fill each section with the
+**SKELETON — outline only.** See `.deepseek/13_DOCS.md` §13.4. Fill each section with the
 procedure *you actually followed*, including the numbers you rejected and why. A tuning guide
 that reads like it was written from experience is worth more than a perfect set of gains.
 

@@ -1,4 +1,4 @@
-"""SKELETON — test bodies not implemented. See IMPLEMENTATION_GUIDE.md §10.3.
+"""SKELETON — test bodies not implemented. See .deepseek/10_TESTS.md §10.3.
 
 Verifies that the checked-in solver is exactly what codegen/ produces from the current model
 and config. A stale generated solver that still builds is the most dangerous failure mode in

@@ -1,4 +1,4 @@
-"""SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §12.1.
+"""SKELETON — no implementation. See .deepseek/12_ANALYSIS.md §12.1.
 
 Produces media/solve_time_histogram.png, the README's central quantitative claim.
 

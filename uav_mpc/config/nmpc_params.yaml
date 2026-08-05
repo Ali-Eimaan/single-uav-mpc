@@ -1,5 +1,5 @@
 # SKELETON — the keys and units are final; the weight VALUES are placeholders that must be
-# re-tuned once the solver runs. See docs/TUNING_GUIDE.md and IMPLEMENTATION_GUIDE.md §9.1.
+# re-tuned once the solver runs. See docs/TUNING_GUIDE.md and .deepseek/09_CONFIG.md §9.1.
 #
 # Every key here is declared as a ROS parameter by NmpcNode::declareParameters(). Keys marked
 # [read-only] are baked into the generated solver and cannot be changed without re-running

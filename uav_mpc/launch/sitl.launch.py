@@ -1,7 +1,7 @@
-"""SKELETON — the one-command demo. See IMPLEMENTATION_GUIDE.md §8.2.
+"""SKELETON — the one-command demo. See .deepseek/08_LAUNCH.md §8.2.
 
 Brings up, in dependency order:
-    1. PX4 SITL + Gazebo Harmonic (gz_x500 model)
+    1. PX4 SITL + Gazebo Jetty (gz_x500 model)
     2. MicroXRCEAgent udp4 -p 8888
     3. the NMPC lifecycle node (via nmpc_only.launch.py)
     4. RViz2 with rviz/nmpc.rviz

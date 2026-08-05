@@ -1,4 +1,4 @@
-"""SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §14.3.
+"""SKELETON — no implementation. See .deepseek/14_CI.md §14.3.
 
 Post-flight assertions for the SITL smoke test. Lives in scripts/ rather than inside the
 workflow so the same checks can be run locally against a bag from a failed CI run:
@@ -15,7 +15,7 @@ import argparse
 
 # Thresholds. Deliberately looser than the unit tests: a shared CI runner is not a flight
 # computer. Changing any of these is changing an acceptance criterion — update
-# IMPLEMENTATION_GUIDE.md §1 in the same commit.
+# .deepseek/01_OVERVIEW.md §1 in the same commit.
 MAX_TIME_TO_TRACKING_S = 20.0
 MAX_RMS_POSITION_ERROR_M = 0.15
 MAX_PEAK_POSITION_ERROR_M = 0.30

@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See IMPLEMENTATION_GUIDE.md §4.
+// SKELETON — declarations only. See .deepseek/04_DYNAMICS.md §4.
 //
 // Templated 12/13-state quadrotor rigid-body dynamics on SE(3).
 // The same equations are mirrored symbolically in codegen/quadrotor_model.py; the C++ version

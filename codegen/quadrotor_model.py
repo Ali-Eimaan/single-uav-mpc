@@ -1,4 +1,4 @@
-"""SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §11.1.
+"""SKELETON — no implementation. See .deepseek/11_CODEGEN.md §11.1.
 
 CasADi symbolic model of the quadrotor, exported as an `AcadosModel`.
 
@@ -13,7 +13,7 @@ Params (np = 8):               p = [wind(3), mass_scale, q_ref(4, wxyz)]
 
 `q_ref` lives in the parameter vector because the NONLINEAR_LS cost residual contains the
 error quaternion q_ref^-1 (x) q, which is a function of both the state and the reference —
-acados' `yref` mechanism alone cannot express it. See IMPLEMENTATION_GUIDE.md §6.3.
+acados' `yref` mechanism alone cannot express it. See .deepseek/06_SOLVER.md §6.3.
 """
 
 from __future__ import annotations

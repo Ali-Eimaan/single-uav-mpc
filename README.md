@@ -1,6 +1,6 @@
 # uav-mpc
 
-Real-time NMPC for a 12-state quadrotor in ROS 2 Jazzy + PX4 SITL + Gazebo Harmonic, using
+Real-time NMPC for a 12-state quadrotor in ROS 2 Lyrical Luth + PX4 SITL + Gazebo Jetty, using
 acados-generated C code, tracking aggressive trajectories.
 
 <!-- TODO(deepseek): badges once the workflows are green. Do not add a badge before the
@@ -11,8 +11,8 @@ acados-generated C code, tracking aggressive trajectories.
 -->
 
 > **Status: skeleton.** The structure, interfaces and documentation outline are in place; the
-> implementation is not. See [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) for the
-> build order and the specification of every stub.
+> implementation is not. See [`.deepseek/`](.deepseek/README.md) for the build order and the
+> specification of every stub.
 
 <!-- TODO(deepseek): media/figure8.gif goes here, above the fold. This is the first thing a
      reader sees; it decides whether they scroll. -->
@@ -23,7 +23,7 @@ acados-generated C code, tracking aggressive trajectories.
 
 ```bash
 # TODO(deepseek): this block is the repo's central promise — clone, build, fly in ten minutes.
-# It must work verbatim on a clean Ubuntu 24.04 machine. Test it in a fresh container before
+# It must work verbatim on a clean Ubuntu 26.04 machine. Test it in a fresh container before
 # every release, and keep it to this many lines.
 ```
 
@@ -31,7 +31,7 @@ acados-generated C code, tracking aggressive trajectories.
 
 - A nonlinear MPC that tracks aggressive quadrotor trajectories at 100 Hz, solved with an
   acados SQP-RTI solver generated from a CasADi model.
-- A ROS 2 Jazzy lifecycle node that speaks PX4's uXRCE-DDS interface, in SITL or on hardware.
+- A ROS 2 Lyrical Luth lifecycle node that speaks PX4's uXRCE-DDS interface, in SITL or on hardware.
 - Minimum-snap and analytic trajectory generation through the differential-flatness map.
 
 ## Results
@@ -50,6 +50,7 @@ acados-generated C code, tracking aggressive trajectories.
 
 | Path | Contents |
 | --- | --- |
+| [`.deepseek/`](.deepseek/README.md) | Implementation specification, split by subsystem |
 | [`uav_mpc/`](uav_mpc/) | The ROS 2 package: node, dynamics, trajectory generation, solver wrapper |
 | [`codegen/`](codegen/) | CasADi model and the acados solver generator |
 | [`analysis/`](analysis/) | Benchmarks and the notebooks producing the plots above |
@@ -61,13 +62,18 @@ acados-generated C code, tracking aggressive trajectories.
 - [Derivations](docs/DERIVATION.md) — dynamics, flatness, NMPC formulation
 - [Tuning guide](docs/TUNING_GUIDE.md)
 - [Hardware bring-up](docs/HARDWARE_BRINGUP.md)
-- [Implementation guide](IMPLEMENTATION_GUIDE.md) — the spec this skeleton is built against
+- [Implementation specification](.deepseek/README.md) — the spec this skeleton is built
+  against, split by subsystem
 
 ## Requirements
 
-<!-- TODO(deepseek): exact versions, pinned. ROS 2 Jazzy, Ubuntu 24.04, PX4 (version from
-     .github/workflows/docker_smoke_test.yml), Gazebo Harmonic, acados (commit from
-     codegen/ACADOS_COMMIT), Eigen 3.4, Python 3.12. -->
+Ubuntu 26.04 LTS · ROS 2 Lyrical Luth · Gazebo Jetty · Python 3.14 · Eigen 3.4 · acados
+(commit pinned in [`codegen/ACADOS_COMMIT`](codegen/ACADOS_COMMIT)) · PX4 (version pinned in
+[`docker_smoke_test.yml`](.github/workflows/docker_smoke_test.yml)).
+
+<!-- TODO(deepseek): replace the line above with the exact verified versions once the version
+     risk register in .deepseek/02_ENVIRONMENT.md §2.1 has been resolved. Lyrical Luth is a
+     young distro and several of those pins are still assumptions. -->
 
 ## Citation
 
@@ -76,4 +82,4 @@ acados-generated C code, tracking aggressive trajectories.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+BSD-3-Clause — see [LICENSE](LICENSE).

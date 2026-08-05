@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — test bodies not implemented. See IMPLEMENTATION_GUIDE.md §10.2.
+// SKELETON — test bodies not implemented. See .deepseek/10_TESTS.md §10.2.
 //
 // A discontinuity in the reference at any derivative up to snap becomes an impulse in the
 // commanded body rate, which is exactly the failure that looks like "the MPC is unstable"

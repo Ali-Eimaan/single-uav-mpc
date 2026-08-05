@@ -1,4 +1,4 @@
-"""SKELETON — launches ONLY the NMPC lifecycle node. See IMPLEMENTATION_GUIDE.md §8.1.
+"""SKELETON — launches ONLY the NMPC lifecycle node. See .deepseek/08_LAUNCH.md §8.1.
 
 Assumes PX4 (SITL or hardware) and the uXRCE-DDS agent are already running. This is the
 building block every other launch file includes.

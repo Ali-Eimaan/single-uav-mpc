@@ -1,4 +1,4 @@
-"""SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §11.2.
+"""SKELETON — no implementation. See .deepseek/11_CODEGEN.md §11.2.
 
 Generates the acados SQP-RTI C solver into codegen/codegen_output/.
 

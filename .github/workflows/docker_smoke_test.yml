@@ -1,4 +1,4 @@
-# SKELETON — job structure defined, steps marked TODO. See IMPLEMENTATION_GUIDE.md §14.3.
+# SKELETON — job structure defined, steps marked TODO. See .deepseek/14_CI.md §14.3.
 #
 # THE differentiating CI job: PX4 SITL + Gazebo + the NMPC node actually fly a hover, headless,
 # inside the container, and the job asserts on the resulting tracking error. Most candidate
@@ -25,20 +25,22 @@ concurrency:
 env:
   # TODO(deepseek): pin these to the exact versions you test against, and reference the same
   # values from colcon_build.yml (px4_msgs must match PX4).
-  PX4_VERSION: "v1.15.4"
-  GZ_VERSION: "harmonic"
-  ROS_DISTRO: "jazzy"
+  # NOTE: Lyrical Luth is a young distro. Every pin below is a forward-looking guess — verify
+  # each one against the release notes before trusting it. See .deepseek/02_ENVIRONMENT.md §2.1.
+  PX4_VERSION: "v1.16.0"     # UNVERIFIED — confirm which release supports Gazebo Jetty
+  GZ_VERSION: "jetty"        # UNVERIFIED — confirm the Lyrical pairing in REP-2000
+  ROS_DISTRO: "lyrical"
 
 jobs:
   hover:
     name: 10 s autonomous hover in SITL
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
       # TODO(deepseek): build (or pull) the sim image. A committed docker/Dockerfile.sitl that
-      # layers PX4 + Gazebo Harmonic + acados onto ros:jazzy is the maintainable option;
+      # layers PX4 + Gazebo Jetty + acados onto ros:lyrical is the maintainable option;
       # publish it to GHCR from a separate manually-triggered workflow so this job only pulls.
       # Building PX4 from source on every push will make this job take 40 minutes.
 
@@ -65,7 +67,7 @@ jobs:
 
   figure8:
     name: 2 laps of a figure-8 in SITL
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     # TODO(deepseek): same shape as `hover`, with figure8.launch.py and looser thresholds
     # (RMS < 0.25 m). Run on schedule + workflow_dispatch only, not on every push — keep the

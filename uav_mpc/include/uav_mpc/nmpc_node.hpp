@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See IMPLEMENTATION_GUIDE.md §7.
+// SKELETON — declarations only. See .deepseek/07_NODE.md §7.
 //
 // ROS 2 lifecycle node running the NMPC at 100 Hz against PX4 over uXRCE-DDS.
 //

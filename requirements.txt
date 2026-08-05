@@ -1,26 +1,39 @@
 # Python toolchain for codegen/ and analysis/.
-# Install into a venv that is ALSO visible to colcon at build time:
-#   python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+#
+# Target interpreter: Python 3.14 (the system Python on Ubuntu 26.04 / ROS 2 Lyrical Luth).
+#
+# Ubuntu 26.04 enforces PEP 668 (externally-managed environment), so a bare `pip install`
+# into the system interpreter will be refused. Use a venv created with --system-site-packages
+# so the ROS 2 Python packages stay importable:
+#   python3 -m venv --system-site-packages .venv
+#   . .venv/bin/activate && pip install -r requirements.txt
+#
+# TODO(deepseek): EVERY pin below is a forward-looking guess. Before trusting them, confirm
+# each package publishes a cp314 wheel for linux-x86_64 — building casadi or scipy from source
+# in CI turns a 5-minute job into a 30-minute one. Where no cp314 wheel exists yet, pin the
+# newest version that does and record the constraint in a trailing comment.
 
 # --- codegen (pinned: solver C output must be byte-reproducible in CI) ---
-casadi==3.6.5
-numpy==1.26.4
-scipy==1.13.1
+casadi==3.7.0          # UNVERIFIED cp314
+numpy==2.3.1           # NOTE: numpy 2.x, not 1.26 — 1.x has no cp314 wheels
+scipy==1.16.0          # UNVERIFIED cp314
 # acados_template is installed from the acados source tree, NOT PyPI:
 #   pip install -e ${ACADOS_SOURCE_DIR}/interfaces/acados_template
 # Pinned acados commit is recorded in codegen/ACADOS_COMMIT.
 
 # --- analysis ---
-matplotlib==3.9.0
-pandas==2.2.2
-jupyter==1.0.0
+matplotlib==3.10.3     # UNVERIFIED cp314
+pandas==2.3.0
+jupyter==1.1.1
 seaborn==0.13.2
 
 # --- rosbag reading for analysis notebooks ---
 # rosbags is a pure-python reader; avoids needing a sourced ROS env in Jupyter.
-rosbags==0.9.22
+# TODO(deepseek): confirm the version that understands the rosbag2 storage format shipped
+# with Lyrical Luth — the default storage plugin has changed across distros before.
+rosbags==0.10.9        # UNVERIFIED against the Lyrical rosbag2 format
 
 # --- dev ---
-pytest==8.2.2
-black==24.4.2
-flake8==7.1.0
+pytest==8.4.1
+black==25.1.0
+flake8==7.3.0

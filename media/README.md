@@ -6,7 +6,7 @@ worse than a README with no images.
 
 | File | Produced by | Content |
 | --- | --- | --- |
-| `figure8.gif` | `launch/figure8.launch.py` + screen capture | Gazebo Harmonic view of the figure-8, with a side panel showing per-step solve time. 10-15 s, looping, under 8 MB. |
+| `figure8.gif` | `launch/figure8.launch.py` + screen capture | Gazebo Jetty view of the figure-8, with a side panel showing per-step solve time. 10-15 s, looping, under 8 MB. |
 | `disturbance_recovery.gif` | `analysis/disturbance_sweep.ipynb` §6 | Step gust at 6 m/s and the recovery, with the position-error trace overlaid. |
 | `solve_time_histogram.png` | `analysis/solve_time_benchmark.py` | Log-x histogram, median and p99 marked, CPU model and acados commit in the title. |
 

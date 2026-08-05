@@ -1,7 +1,8 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // SKELETON — no implementation. Every function below is declared in
-// include/uav_mpc/quadrotor_dynamics.hpp. See IMPLEMENTATION_GUIDE.md §4.
+// include/uav_mpc/quadrotor_dynamics.hpp. See .deepseek/04_DYNAMICS.md §4.
 
 #include "uav_mpc/quadrotor_dynamics.hpp"
 

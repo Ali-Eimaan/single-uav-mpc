@@ -1,6 +1,6 @@
 # Hardware bring-up
 
-**SKELETON — outline only.** See `IMPLEMENTATION_GUIDE.md` §13.5.
+**SKELETON — outline only.** See `.deepseek/13_DOCS.md` §13.5.
 
 > This document describes how this controller *would be* deployed on real hardware. Where a
 > step has not been performed on a physical vehicle, say so in that step. An advisor reading
@@ -23,7 +23,9 @@
 
 ## 2. Hardware checklist
 
-- [ ] Vehicle: Holybro X500 v2, Pixhawk 6C, PX4 v1.15+.
+- [ ] Vehicle: Holybro X500 v2, Pixhawk 6C, PX4 v1.16+ (the version pinned in
+      `docker_smoke_test.yml`; flashing a different one than SITL was tested against is a
+      classic source of "it worked in sim").
 - [ ] Companion: the compute you will actually use, with the measured solve time on *that*
       CPU — a 0.4 ms desktop number means nothing on a Raspberry Pi. Re-run
       `analysis/solve_time_benchmark.py` on the target and record it here.
@@ -49,7 +51,7 @@ any solver infeasibility in flight, position error beyond 0.5 m, or link loss.
 
 - [ ] Differences from PX4: no `px4_msgs`, no EKF you control, a much lighter airframe with
       faster attitude dynamics.
-- [ ] The adapter node contract (`IMPLEMENTATION_GUIDE.md` §8.4): what the NMPC publishes and
+- [ ] The adapter node contract (`.deepseek/08_LAUNCH.md` §8.4): what the NMPC publishes and
       what `crazyflie_ros2` expects, including the thrust-to-PWM map and its calibration.
 - [ ] Mocap setup with Crazyswarm2.
 - [ ] The honest caveat: at CF scale the 100 Hz attitude-setpoint interface is marginal; the

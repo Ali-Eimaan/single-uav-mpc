@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §7.8.
+// SKELETON — no implementation. See .deepseek/07_NODE.md §7.8.
 //
 // Standalone entry point. The node is ALSO available as a composable component
 // (RCLCPP_COMPONENTS_REGISTER_NODE in nmpc_node.cpp) so it can be loaded into a container

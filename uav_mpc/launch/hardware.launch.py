@@ -1,4 +1,4 @@
-"""SKELETON — real-hardware bring-up. See IMPLEMENTATION_GUIDE.md §8.4 and
+"""SKELETON — real-hardware bring-up. See .deepseek/08_LAUNCH.md §8.4 and
 docs/HARDWARE_BRINGUP.md.
 
 Same NMPC node as SITL; Gazebo and PX4-SITL are replaced by real drivers. Two backends:

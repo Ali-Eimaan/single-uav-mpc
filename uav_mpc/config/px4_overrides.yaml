@@ -2,7 +2,7 @@
 # assumes. Applied to SITL automatically by launch/sitl.launch.py (via the PX4 shell), and
 # listed here as a checklist for real hardware (docs/HARDWARE_BRINGUP.md).
 #
-# SKELETON — the parameter NAMES and the rationale are correct for PX4 v1.15/v1.16.
+# SKELETON — the parameter NAMES and the rationale are correct for PX4 v1.16.
 # TODO(deepseek): verify each default against the PX4 version pinned in
 # .github/workflows/docker_smoke_test.yml before trusting the values.
 

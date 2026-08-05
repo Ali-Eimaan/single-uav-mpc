@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §6.
+// SKELETON — no implementation. See .deepseek/06_SOLVER.md §6.
 //
 // This is the ONLY translation unit allowed to include acados headers. Guard every acados
 // include with UAV_MPC_WITH_ACADOS so the package still builds (with a stub backend)

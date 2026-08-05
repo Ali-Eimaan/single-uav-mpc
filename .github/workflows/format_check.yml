@@ -1,4 +1,4 @@
-# SKELETON — job structure defined, steps marked TODO. See IMPLEMENTATION_GUIDE.md §14.2.
+# SKELETON — job structure defined, steps marked TODO. See .deepseek/14_CI.md §14.2.
 #
 # Fast, no-build lint gate. Should finish in under two minutes so it is the first thing a
 # contributor sees fail.
@@ -18,38 +18,40 @@ concurrency:
 jobs:
   cpp:
     name: C++ (clang-format / cpplint / uncrustify)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container:
-      image: ros:jazzy-ros-base
+      image: ros:lyrical-ros-base
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      # TODO(deepseek): apt install ros-jazzy-ament-cmake-clang-format
-      #                              ros-jazzy-ament-cmake-cpplint
-      #                              ros-jazzy-ament-cmake-uncrustify
+      # TODO(deepseek): apt install ros-lyrical-ament-cmake-clang-format
+      #                              ros-lyrical-ament-cmake-cpplint
+      #                              ros-lyrical-ament-cmake-uncrustify
       # TODO(deepseek): run each ament linter over uav_mpc/{src,include,test},
       # with --config .clang-format for clang-format. Fail on any diff, and print the diff so
       # the fix is copy-pasteable.
 
   python:
     name: Python (black / flake8)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      # TODO(deepseek): pip install black==24.4.2 flake8==7.1.0
-      # TODO(deepseek): black --check --diff codegen/ analysis/ uav_mpc/launch/
+          python-version: "3.14"
+      # TODO(deepseek): pip install black and flake8 at the versions pinned in
+      # requirements.txt — do not repeat the version numbers here, or the two will drift.
+      # TODO(deepseek): black --check --diff codegen/ analysis/ scripts/ uav_mpc/launch/
       #                                      uav_mpc/test/
-      # TODO(deepseek): flake8 with a setup.cfg (max-line-length 100, ignore E203/W503).
-      #                 Add that setup.cfg — do not pass the flags inline, or the local run
-      #                 and the CI run will drift apart.
+      # TODO(deepseek): flake8 (settings live in the committed setup.cfg; pass no inline flags,
+      #                 or the local run and the CI run will drift apart).
+      # NOTE: this job uses actions/setup-python rather than the system interpreter, so PEP 668
+      # does not apply here. The container-based jobs DO hit it — see .deepseek/02_ENVIRONMENT.md §2.
 
   yaml-and-xml:
     name: YAML / package.xml
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -58,10 +60,17 @@ jobs:
 
   docs:
     name: Docs are not stale
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      # TODO(deepseek): a small script that fails if any file still contains "TODO(deepseek)"
+      # TODO(deepseek): a small script that fails if any file still contains the TODO marker
       # once the repo is tagged v1.0. Until then, invert it: report the count as a job summary
       # so the remaining work is visible on every PR. This is a progress meter, not a gate.
+      #   grep -rn "TODO(deepseek)" --exclude-dir=.git --exclude-dir=.deepseek . | wc -l
+      # The --exclude-dir=.deepseek is required: the specification documents quote the marker
+      # string, and counting those would make the meter never reach zero.
+      #
+      # Also report the count of "UNVERIFIED" markers the same way — see
+      # .deepseek/15_ROADMAP.md §17. That number matters more than the TODO count, because an
+      # unimplemented function is visible and an unverified constant is not.

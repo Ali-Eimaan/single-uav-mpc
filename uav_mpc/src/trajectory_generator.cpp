@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §5.
+// SKELETON — no implementation. See .deepseek/05_TRAJECTORY.md §5.
 
 #include "uav_mpc/trajectory_generator.hpp"
 

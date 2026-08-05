@@ -4,12 +4,12 @@
   <name>uav_mpc</name>
   <version>0.1.0</version>
   <description>
-    Real-time nonlinear MPC for a 12-state quadrotor on ROS 2 Jazzy, using an acados-generated
+    Real-time nonlinear MPC for a 12-state quadrotor on ROS 2 Lyrical Luth, using an acados-generated
     SQP-RTI solver and speaking to PX4 over uXRCE-DDS.
   </description>
 
   <maintainer email="ali.eimaan@icloud.com">Ali-Eimaan</maintainer>
-  <license>MIT</license>
+  <license>BSD-3-Clause</license>
   <url type="repository">https://github.com/Ali-Eimaan/uav-mpc</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

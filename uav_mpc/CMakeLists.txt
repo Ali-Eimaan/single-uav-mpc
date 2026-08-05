@@ -1,5 +1,5 @@
 # SKELETON — the structure is complete, the acados/target wiring marked TODO is not.
-# See IMPLEMENTATION_GUIDE.md §3.
+# See .deepseek/03_BUILD_SYSTEM.md §3.
 cmake_minimum_required(VERSION 3.16)
 project(uav_mpc LANGUAGES C CXX)
 

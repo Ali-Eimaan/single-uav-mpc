@@ -1,6 +1,6 @@
-# SKELETON — job structure defined, steps marked TODO. See IMPLEMENTATION_GUIDE.md §14.1.
+# SKELETON — job structure defined, steps marked TODO. See .deepseek/14_CI.md §14.1.
 #
-# Builds the workspace from clean in a ROS 2 Jazzy container and runs the unit tests.
+# Builds the workspace from clean in a ROS 2 Lyrical Luth container and runs the unit tests.
 # This is the badge on the README; it must be green or the repo has failed its first filter.
 
 name: colcon build
@@ -17,10 +17,10 @@ concurrency:
 
 jobs:
   build:
-    name: Jazzy / Ubuntu 24.04
-    runs-on: ubuntu-24.04
+    name: Lyrical Luth / Ubuntu 26.04
+    runs-on: ubuntu-26.04
     container:
-      image: ros:jazzy-ros-base
+      image: ros:lyrical-ros-base
     timeout-minutes: 45
 
     steps:
@@ -33,10 +33,16 @@ jobs:
       # is a CI nobody trusts.
 
       # TODO(deepseek): install system deps
-      #   apt: build-essential cmake git python3-pip python3-colcon-common-extensions
-      #        python3-rosdep libeigen3-dev
-      #   pip: -r src/uav-mpc/requirements.txt  (use --break-system-packages or a venv;
-      #        pick one and be consistent with the other workflows)
+      #   apt: build-essential cmake git python3-pip python3-venv
+      #        python3-colcon-common-extensions python3-rosdep libeigen3-dev
+      #   pip: Ubuntu 26.04 enforces PEP 668, so a bare `pip install` into the system
+      #        interpreter is REFUSED. Create the venv with --system-site-packages (so the
+      #        ROS 2 python modules stay importable) and install requirements.txt into it:
+      #          python3 -m venv --system-site-packages /opt/venv
+      #          /opt/venv/bin/pip install -r src/uav-mpc/requirements.txt
+      #        then put /opt/venv/bin on PATH for every later step. Do NOT reach for
+      #        --break-system-packages: it works until it corrupts a rosdep-installed package,
+      #        and then the failure looks like a ROS bug.
 
       # TODO(deepseek): clone px4_msgs into src/ at the tag matching the PX4 version pinned in
       # docker_smoke_test.yml. Version skew between px4_msgs and PX4 is the #1 cause of a
@@ -68,9 +74,9 @@ jobs:
 
   build-no-acados:
     name: Stub backend (no acados)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container:
-      image: ros:jazzy-ros-base
+      image: ros:lyrical-ros-base
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

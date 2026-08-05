@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See IMPLEMENTATION_GUIDE.md §6.
+// SKELETON — declarations only. See .deepseek/06_SOLVER.md §6.
 //
 // RAII wrapper around the acados-generated OCP solver. Owns the capsule, the nlp config, dims,
 // in/out structs and the opts. Nothing outside this file may include acados headers, so the

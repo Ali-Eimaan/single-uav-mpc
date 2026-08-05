@@ -1,6 +1,7 @@
-// Copyright (c) 2026 Ali-Eimaan. MIT License.
+// Copyright (c) 2026 Ali-Eimaan.
+// SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — no implementation. See IMPLEMENTATION_GUIDE.md §7.
+// SKELETON — no implementation. See .deepseek/07_NODE.md §7.
 
 #include "uav_mpc/nmpc_node.hpp"
 
