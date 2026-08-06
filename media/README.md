@@ -12,7 +12,7 @@ worse than a README with no images.
 
 ## Capture notes
 
-> TODO(deepseek): fill in the exact recipe once the first capture is made — recorder, frame
+> UNVERIFIED: exact recipe to be filled in once the first capture is made — recorder, frame
 > rate, crop, palette settings for the GIF, and the `ffmpeg`/`gifski` command line. The point
 > is that these are regenerable, not one-off screen recordings nobody can reproduce.
 

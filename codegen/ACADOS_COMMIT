@@ -1,9 +1,17 @@
 # Pinned acados revision. generate_acados_solver.py refuses to run against anything else.
 #
-# TODO(deepseek): replace the placeholder below with the full 40-character SHA of the acados
-# commit you actually generate and test against, and record the release tag it corresponds to.
+# UNVERIFIED: the commit below is a placeholder. acados has not yet been built against the
+# Ubuntu 26.04 toolchain in this workspace (risk V8, .deepseek/02_ENVIRONMENT.md §2.1), so a
+# real SHA cannot be recorded yet.
+#
+# To pin:
+#   1. export ACADOS_SOURCE_DIR=$HOME/acados  (or wherever the source lives)
+#   2. build acados from source (see .deepseek/02_ENVIRONMENT.md)
+#   3. git -C $ACADOS_SOURCE_DIR rev-parse HEAD   -> paste the full 40-char SHA below
+#   4. record the release tag it corresponds to (git -C $ACADOS_SOURCE_DIR describe --tags)
+#
 # Do NOT pin a branch name — the whole point is reproducibility.
 #
 # commit:
 0000000000000000000000000000000000000000
-# tag: v0.4.x  (TODO: record the real tag)
+# tag: UNVERIFIED — record the real release tag when the commit above is pinned.

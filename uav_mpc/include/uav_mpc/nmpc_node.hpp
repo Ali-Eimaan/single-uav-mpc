@@ -1,9 +1,16 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See .deepseek/07_NODE.md §7.
-//
 // ROS 2 lifecycle node running the NMPC at 100 Hz against PX4 over uXRCE-DDS.
+// See .deepseek/07_NODE.md §7.
+//
+// [px4_msgs] This header and nmpc_node.cpp depend on the px4_msgs package
+// (https://github.com/PX4/px4_msgs), which is NOT installed in this environment.
+// The node targets in CMakeLists.txt are gated on px4_msgs_FOUND, so the core library
+// and tests build without it. To build the node, first install px4_msgs:
+//   git clone https://github.com/PX4/px4_msgs.git <ros2_ws>/src/px4_msgs
+//   cd <ros2_ws> && colcon build --packages-select px4_msgs
+// Every place that needs px4_msgs is marked with a `[px4_msgs]` comment.
 //
 //   IN : /fmu/out/vehicle_local_position      (px4_msgs::msg::VehicleLocalPosition, NED)
 //        /fmu/out/vehicle_attitude            (px4_msgs::msg::VehicleAttitude, NED/FRD)
@@ -67,42 +74,41 @@ public:
   ~NmpcNode() override;
 
   // --- lifecycle transitions -----------------------------------------------------------------
-  // TODO(deepseek): declare params, load airframe + solver config, build the solver & generator.
+  /// Load params + airframe + model + trajectory + solver; create subs, pubs, service, param cb.
+  /// Returns FAILURE (never throws) with one clear RCLCPP_ERROR naming the cause.
   CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
-  // TODO(deepseek): activate publishers, start the 100 Hz timer, arm the state machine.
+  /// Activate publishers, create the 100 Hz timer, state -> Streaming.
   CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
-  // TODO(deepseek): stop the timer, deactivate publishers, hand control back to PX4.
+  /// Cancel + reset the timer FIRST, then deactivate pubs, state -> Idle.
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
-  // TODO(deepseek): release the solver and subscriptions.
+  /// Release solver, generator, model, pubs/subs.
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
-  // TODO(deepseek): best-effort safe stop.
+  /// Best-effort safe stop: stop timer + publishing. Does NOT disarm (PX4 failsafe is authority).
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
 private:
   // --- parameters ----------------------------------------------------------------------------
-  // TODO(deepseek): implement — declares every parameter in config/nmpc_params.yaml with
-  // descriptors, ranges and read-only flags.
+  /// Declares every key of config/nmpc_params.yaml with descriptors, ranges, read-only flags.
   void declareParameters();
-  // TODO(deepseek): implement — reads declared params into the members below; validates.
+  /// Reads declared params into the members below; validates. Returns false + reason on error.
   bool loadParameters(std::string * error);
-  // TODO(deepseek): implement — on-the-fly reconfiguration of weights and trajectory params.
+  /// Live weight + trajectory reconfiguration; rejects structural changes with a reason string.
   rcl_interfaces::msg::SetParametersResult onParameterUpdate(
     const std::vector<rclcpp::Parameter> & params);
 
   // --- subscriptions -------------------------------------------------------------------------
-  // TODO(deepseek): implement — cache NED position/velocity, convert to ENU, stamp arrival time.
+  /// Caches NED position/velocity, converts to ENU, stamps arrival time. Rejects invalid flags.
   void onLocalPosition(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg);
-  // TODO(deepseek): implement — cache attitude, convert NED/FRD -> ENU/FLU.
+  /// Caches attitude; converts NED/FRD -> ENU/FLU (msg->q is w,x,y,z NED/FRD).
   void onAttitude(const px4_msgs::msg::VehicleAttitude::SharedPtr msg);
-  // TODO(deepseek): implement — cache body rates, FRD -> FLU.
+  /// Caches body rates; FRD -> FLU is (x, -y, -z).
   void onAngularVelocity(const px4_msgs::msg::VehicleAngularVelocity::SharedPtr msg);
-  // TODO(deepseek): implement — track arming state + nav state, detect loss of offboard.
+  /// Tracks arming state + nav state, detects loss of offboard.
   void onVehicleStatus(const px4_msgs::msg::VehicleStatus::SharedPtr msg);
 
   // --- services ------------------------------------------------------------------------------
-  // TODO(deepseek): implement — swap the active trajectory at runtime, rejecting the request
-  // unless the vehicle is in Tracking or Streaming and the new trajectory starts near the
-  // current position.
+  /// Swaps the active trajectory at runtime; rejects unless in Tracking/Streaming and the new
+  /// trajectory starts within `max_jump_on_switch` of the current position.
   void onSetTrajectory(
     const std::shared_ptr<uav_mpc::srv::SetTrajectory::Request> request,
     std::shared_ptr<uav_mpc::srv::SetTrajectory::Response> response);
@@ -115,52 +121,51 @@ private:
   ///   4. push into acados, solve, measure
   ///   5. map u0 -> attitude setpoint, publish
   ///   6. publish OffboardControlMode, status, RViz paths
-  // TODO(deepseek): implement
   void controlLoop();
 
   /// Build the solver state vector from the cached PX4 messages, in the active AttitudeRep.
   /// Returns false if any source is stale beyond `state_timeout_`.
-  // TODO(deepseek): implement
   bool assembleState(Eigen::VectorXd * x0, std::string * why_stale);
 
   /// Forward-integrate x0 by the measured sensor+actuator latency using the last applied input,
   /// so the OCP starts from where the vehicle will be when the command lands.
-  // TODO(deepseek): implement
   Eigen::VectorXd compensateLatency(const Eigen::VectorXd & x0, double latency_s) const;
 
   /// u0 [per-rotor thrust, N] -> PX4 VehicleAttitudeSetpoint (q_d in NED/FRD, normalised
   /// thrust_body[2] in [-1, 0]). Uses the desired body z-axis implied by the predicted
   /// acceleration at stage 1, per §7.6.
-  // TODO(deepseek): implement
   px4_msgs::msg::VehicleAttitudeSetpoint toAttitudeSetpoint(
     const Eigen::VectorXd & u0, const Eigen::VectorXd & x_pred_1) const;
 
   /// Normalised thrust for PX4 from collective thrust [N], using the hover-thrust calibration
   /// (`px4_hover_thrust_` from config/px4_overrides.yaml) and a linear/quadratic mapping.
-  // TODO(deepseek): implement
   double normaliseThrust(double collective_thrust_newton) const;
 
   // --- PX4 handshake -------------------------------------------------------------------------
-  // TODO(deepseek): implement — must be published at >= 2 Hz *before* and during offboard.
+  /// Must be published at >= 2 Hz *before* and during offboard (every control tick).
   void publishOffboardControlMode();
-  // TODO(deepseek): implement — VEHICLE_CMD_DO_SET_MODE to offboard.
+  /// VEHICLE_CMD_DO_SET_MODE (176) to offboard: param1 = 1, param2 = 6.
   void requestOffboardMode();
-  // TODO(deepseek): implement — VEHICLE_CMD_COMPONENT_ARM_DISARM. Gated on `auto_arm_` param.
+  /// VEHICLE_CMD_COMPONENT_ARM_DISARM (400), param1 = 1. Gated on `auto_arm_` param.
   void requestArm();
-  // TODO(deepseek): implement
+  /// param1 = 0. Only from Landing with |z| < 0.15 m and |v| < 0.2 m/s.
   void requestDisarm();
 
   // --- state machine -------------------------------------------------------------------------
-  // TODO(deepseek): implement — the transition table of §7.3.
+  /// The transition table of §7.3.
   void updateControllerState();
-  // TODO(deepseek): implement — level attitude, hover thrust, loud throttled warning.
+  /// Level attitude, hover thrust, loud throttled warning, solver guess reset.
   void enterFailsafe(const std::string & reason);
 
   // --- telemetry -----------------------------------------------------------------------------
-  // TODO(deepseek): implement
+  /// Fills NmpcStatus (solve info, tracking error, applied command, timing).
   void publishStatus(const SolveResult & result, const Eigen::VectorXd & x0);
-  // TODO(deepseek): implement — predicted + reference paths in ENU for RViz.
+  /// Predicted + reference nav_msgs::Path in frame "map" (ENU). Skipped when nobody subscribes.
   void publishVisualisation();
+
+  /// Overrides the reference horizon with a vertical position ramp for Takeoff/Landing (§7.3).
+  void fillTakeoffLandingHorizon(
+    ControllerState state, const Eigen::VectorXd & x0, double dt, int n, double hover_thrust_n);
 
   // --- publishers / subscribers ---------------------------------------------------------------
   rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr sub_local_position_;
@@ -189,6 +194,7 @@ private:
   std::unique_ptr<QuadrotorDynamics<double, AttitudeRep::Quaternion>> model_;
   QuadrotorParams airframe_{};
   SolverConfig solver_config_{};
+  TrajectoryParams trajectory_params_{};  ///< last accepted trajectory (service + param updates)
 
   // --- cached state (guarded by state_mutex_) ---------------------------------------------------
   mutable std::mutex state_mutex_;
@@ -204,20 +210,42 @@ private:
   std::atomic<ControllerState> controller_state_{ControllerState::Idle};
   std::atomic<bool> armed_{false};
   std::atomic<bool> offboard_active_{false};
+  std::atomic<bool> landing_requested_{false};
   rclcpp::Time trajectory_start_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_tick_time_{0, 0, RCL_ROS_TIME};
   Eigen::VectorXd last_applied_input_{};
+  Eigen::VectorXd last_x0_{};      ///< last assembled state, for failsafe resetToHover
+  Eigen::Quaterniond last_q_d_enu_{Eigen::Quaterniond::Identity()};  ///< last sent setpoint attitude
   int offboard_stream_counter_{0};
   int consecutive_solver_failures_{0};
+  double hover_thrust_n_{0.0};   ///< [N] per-rotor hover thrust, m*g/4 — solver seed + takeoff ref
+
+  // --- reference buffers (pre-sized in on_configure; NO allocation inside the control loop) -----
+  std::vector<Eigen::VectorXd> x_refs_;   ///< N+1 states
+  std::vector<Eigen::VectorXd> u_refs_;   ///< N inputs
 
   // --- parameters (mirrors config/nmpc_params.yaml) ---------------------------------------------
   double control_rate_hz_{100.0};
   double state_timeout_s_{0.1};
   double latency_compensation_s_{0.02};
   double takeoff_altitude_m_{1.5};
+  double takeoff_speed_mps_{0.5};
+  double landing_speed_mps_{0.3};
+  double max_jump_on_switch_m_{1.0};
+  double log_solve_time_warn_ms_{2.0};
+  double status_publish_rate_hz_{100.0};
   double px4_hover_thrust_{0.5};
   bool auto_arm_{false};
   bool publish_visualisation_{true};
   std::string airframe_params_path_{};
+
+  // --- per-tick telemetry cache -----------------------------------------------------------------
+  double loop_period_ms_{0.0};
+  double loop_duration_ms_{0.0};
+  double state_age_ms_{0.0};
+
+  /// Guards trajectory_ swap (service callback) vs sampling (control loop).
+  mutable std::mutex trajectory_mutex_;
 };
 
 }  // namespace uav_mpc

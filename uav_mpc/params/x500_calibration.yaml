@@ -1,6 +1,6 @@
 # Holybro X500 v2 — the PX4 reference airframe (SYS_AUTOSTART 4001, gz_x500).
 #
-# SKELETON. TODO(deepseek): the values below are the PX4 SITL model's own numbers, taken from
+# UNVERIFIED: the values below are the PX4 SITL model's own numbers, taken from
 # the Gazebo model SDF and the PX4 airframe config. Before v1.0, verify EVERY entry against:
 #   - PX4-gazebo-models/models/x500/model.sdf        (mass, inertia, rotor positions)
 #   - PX4-Autopilot/src/modules/simulation/gz_bridge (motor constants)
@@ -10,7 +10,7 @@
 airframe:
   name: "x500_v2"
   source: "PX4 gz_x500 SDF + Holybro X500 v2 datasheet"
-  verified: false            # TODO(deepseek): flip to true once cross-checked
+  verified: false            # UNVERIFIED: flip to true once cross-checked
 
   # --- mass properties ---------------------------------------------------------------------
   mass: 2.0                   # [kg] airframe + 4S 5000 mAh; SITL model uses 2.0

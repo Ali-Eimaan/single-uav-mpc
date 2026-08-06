@@ -1,0 +1,17 @@
+# yamllint configuration, committed so the local run and the CI run cannot drift apart —
+# format_check.yml invokes yamllint with no inline flags on purpose (same philosophy as
+# setup.cfg). Relaxed line length: PX4 parameter files carry long explanatory comments.
+extends: default
+
+rules:
+  line-length:
+    max: 160
+    level: warning
+  comments-indentation: disable
+  document-start: disable
+  truthy:
+    # Launch files legitimately use 'on'/'yes' as words in descriptions.
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+  indentation:
+    spaces: 2
+    indent-sequences: consistent

@@ -1,14 +1,20 @@
-% SKELETON — structure only, no mathematics written.
-% See .deepseek/13_DOCS.md §13.2.
+% Copyright (c) 2026 Ali-Eimaan.
+% SPDX-License-Identifier: BSD-3-Clause
 %
-% Implements: TrajectoryGenerator::flatToStateInput().
-% This is Mellinger & Kumar's result restated in YOUR notation, with the algebra shown. The
-% point of writing it out is that the reader can check your code against it line by line —
-% so every intermediate step must be present, not just the final formulas.
+% Authority for the equations implemented in TrajectoryGenerator::flatToStateInput()
+% (uav_mpc/src/trajectory_generator.cpp).
+% This is Mellinger & Kumar's result restated in the notation of
+% quadrotor_se3_dynamics.tex, with the algebra shown so the reader can check the code
+% against it line by line.
 
 \documentclass[11pt]{article}
-\usepackage{amsmath,amssymb,amsthm,bm,geometry,hyperref,cleveref}
+\usepackage{amsmath,amssymb,amsthm,bm,geometry,hyperref,cleveref,booktabs,siunitx}
 \geometry{margin=1in}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\SO}{\mathrm{SO}(3)}
+\newcommand{\skewm}[1]{\left[#1\right]_\times}
+\newcommand{\quatmul}{\otimes}
 
 \title{Differential Flatness of the Quadrotor and the Flat-Output-to-State Map}
 \author{Ali-Eimaan}
@@ -18,48 +24,212 @@
 \maketitle
 
 \section{Statement}
-% TODO(deepseek): define differential flatness; state that sigma = (x, y, z, psi) is a flat
-% output for the quadrotor model of quadrotor_se3_dynamics.tex; name the conditions under
-% which the claim holds (thrust strictly positive, i.e. no free fall).
+
+A control system is \emph{differentially flat} if there exist flat outputs
+$\bm\sigma(t)$ such that every state and input is a function of $\bm\sigma$ and finitely
+many of its derivatives. For the quadrotor model of \texttt{quadrotor\_se3\_dynamics.tex}
+the flat output is the position--yaw triple
+\begin{equation}
+  \bm\sigma = (x, y, z, \psi) \in \R^3 \times S^1,
+  \label{eq:flatout}
+\end{equation}
+with the thrust $T$ and attitude $R$ recoverable from $(\ddot{\bm p}, \ddot\psi)$ and the
+body rates from $(\dddot{\bm p}, \dddot\psi)$. The claim holds provided thrust is strictly
+positive, $\|\ddot{\bm p} + g\bm e_3\| > 0$: a free-falling vehicle has an undefined
+attitude. This is the structure Mellinger \& Kumar (2011) exploit: a trajectory
+$\bm\sigma(t) \in C^4$ maps to a dynamically feasible state--input trajectory without
+solving any differential equation.
 
 \section{Recovering attitude}
-% TODO(deepseek):
-%   t = \ddot p + g e_3  (required specific force, world frame)
-%   z_B = t / ||t||
-%   x_C = [\cos\psi, \sin\psi, 0]^T
-%   y_B = (z_B \times x_C) / ||z_B \times x_C||,   x_B = y_B \times z_B
-%   R = [x_B, y_B, z_B]
-% Include the degenerate case ||z_B \times x_C|| \to 0 (vertical yaw axis alignment) and
-% state what the implementation does there.
+
+The vehicle must produce the specific force
+\begin{equation}
+  \bm t = \ddot{\bm p} + g \bm e_3, \qquad \bm e_3 = (0,0,1),
+  \label{eq:tvec}
+\end{equation}
+pointing along the body thrust axis:
+\begin{equation}
+  \bm z_B = \frac{\bm t}{\|\bm t\|}.
+  \label{eq:zb}
+\end{equation}
+The heading constraint fixes a body axis relative to a yaw-anchored intermediate frame. With
+$\bm x_C = (\cos\psi, \sin\psi, 0)^{\mathsf T}$ the yaw direction in the horizontal plane:
+\begin{align}
+  \bm y_B &= \frac{\bm z_B \times \bm x_C}{\|\bm z_B \times \bm x_C\|},
+  \label{eq:yb} \\
+  \bm x_B &= \bm y_B \times \bm z_B,
+  \label{eq:xb}
+\end{align}
+and $R = [\bm x_B \ \bm y_B \ \bm z_B] \in \SO$. \Cref{eq:yb} makes $\bm y_B$ horizontal by
+construction and orthogonal to $\bm z_B$, so $\bm x_B$ from \eqref{eq:xb} is orthogonal to
+both: $R$ is a proper rotation.
+
+\paragraph{Degenerate case.} When $\bm z_B \times \bm x_C \to \bm 0$ — the required thrust
+axis is vertical (hover, or any straight-and-level segment) — \eqref{eq:yb} is undefined.
+The implementation (\texttt{trajectory\_generator.cpp}, \texttt{flatToStateInput})
+perturbs $\psi$ by $10^{-4}$ rad and recomputes, and also guards $\|a + g e_z\| < 10^{-3}$
+by falling back to a level attitude with $T = 0$ (free-fall / degenerate branch). This is a
+numeric branch, not an approximation: the perturbed solution converges to the same limit.
 
 \section{Recovering thrust}
-% TODO(deepseek): T = m ||t||, and the drag-corrected version when the model includes rotor
-% drag (Faessler et al.). Note explicitly that ignoring drag here is a modelling error that
-% shows up as a systematic lag on fast trajectories — this is the honest caveat.
+
+The collective thrust is the projection of the required force onto the body axis:
+\begin{equation}
+  T = m \|\bm t\|,
+  \label{eq:T}
+\end{equation}
+so the per-rotor thrusts follow from the allocation inverse
+($\bm u = A^{-1}[T; \bm\tau]$, see \texttt{quadrotor\_se3\_dynamics.tex}
+\eqref{eq:alloc}). \emph{Without} the rotor-drag term in the model, \eqref{eq:T} is exact
+only for drag-free dynamics. With linear drag $\bm F_d = -D R^{\mathsf T} \bm v$ the correct
+expression is
+\begin{equation}
+  T = m \left\| \ddot{\bm p} + g \bm e_3 + \frac{1}{m} R D R^{\mathsf T} \dot{\bm p}
+  \right\|,
+  \label{eq:Tdrag}
+\end{equation}
+a fixed point because $R$ and hence the drag direction depend on $\bm t$ which itself
+depends on $T$. The implementation intentionally ignores this correction (Faessler et al.\
+2017 discuss it): the model used by the generator is the drag-free flat map. This is a
+modelling error that shows up as a systematic lag on fast trajectories — the honest caveat
+is stated in \texttt{nmpc\_formulation.tex} \S\ref{sec:limits} and is visible in the error
+vs.\ commanded-acceleration plot of \texttt{analysis/tracking\_error\_analysis.ipynb}.
 
 \section{Recovering body rates from jerk}
-% TODO(deepseek): differentiate m \ddot p = T R e_3 - ... once; project onto x_B, y_B, z_B to
-% get \omega_x, \omega_y and \dot T. Get \omega_z from the yaw-rate constraint. Show the
-% algebra; the projection step is where implementations go wrong.
+
+Differentiate the translational equation of motion once. With $T = m \|\bm t\|$ and
+$\bm z_B = \bm t/\|\bm t\|$:
+\begin{equation}
+  m \dddot{\bm p} = \dot T \bm z_B + T \dot{\bm z}_B
+  \qquad\Longrightarrow\qquad
+  \dot T = m \bm z_B \cdot \dddot{\bm p},
+  \label{eq:Tdot}
+\end{equation}
+because $\bm z_B \perp \dot{\bm z}_B$. The perpendicular component defines
+\begin{equation}
+  \bm h = \dot{\bm z}_B = \frac{m}{T} \left( \dddot{\bm p} - (\bm z_B \cdot
+  \dddot{\bm p}) \bm z_B \right),
+  \label{eq:h}
+\end{equation}
+the projection of the jerk onto the plane perpendicular to $\bm z_B$, scaled by $m/T$. The
+body-rate components follow from the kinematics $\dot{\bm x}_B = \skewm{\bm\omega} \bm x_B$,
+i.e.\ $\bm\omega \cdot \bm y_B = \dot{\bm x}_B \cdot \bm y_B$ etc.:
+\begin{align}
+  \omega_x &= -\bm h \cdot \bm y_B, \label{eq:wx} \\
+  \omega_y &= \bm h \cdot \bm x_B, \label{eq:wy}
+\end{align}
+using $\dot{\bm z}_B = \bm h$. The yaw rate enters through the constraint that $\bm y_B$ and
+$\bm x_B$ rotate with the commanded heading:
+\begin{equation}
+  \omega_z = \frac{\dot\psi (\bm x_C \cdot \bm x_B) + \omega_y (\bm y_C \cdot \bm z_B)}
+    {\|\bm y_C \times \bm z_B\|},
+  \label{eq:wz}
+\end{equation}
+with $\bm y_C = (-\sin\psi, \cos\psi, 0)^{\mathsf T}$. These three equations are exactly
+the implementation at \texttt{trajectory\_generator.cpp}
+(\texttt{flatToStateInput}, lines 300--315): the projection onto $\bm x_B, \bm y_B$ is the
+step where implementations go wrong — using the raw jerk instead of its perpendicular
+projection $\bm h$ misattributes the thrust-rate component to a body rate.
 
 \section{Recovering angular acceleration from snap}
-% TODO(deepseek): differentiate again; solve for \dot\omega; then \tau = J\dot\omega +
-% \omega \times J\omega, and u = A^{-1}[T, \tau]^T.
+
+Differentiate \eqref{eq:h} once more to get $\ddot{\bm z}_B = \bm h'$, then propagate the
+product rule through \eqref{eq:yb}--\eqref{eq:xb} to obtain $R'$ and $R''$. The
+angular-acceleration matrix follows from differentiating $[\bm\omega]_\times = R^{\mathsf T}
+R'$:
+\begin{equation}
+  [\dot{\bm\omega}]_\times = R'^{\mathsf T} R' + R^{\mathsf T} R'',
+  \label{eq:wdot}
+\end{equation}
+and the required body torque from Euler's equation:
+\begin{equation}
+  \bm\tau = J \dot{\bm\omega} + \bm\omega \times J \bm\omega,
+  \label{eq:tau}
+\end{equation}
+finally $\bm u = A^{-1} [T; \bm\tau]$. The implementation follows
+\eqref{eq:wdot} literally: \texttt{omega\_dot\_hat = R\_prime.transpose() * R\_prime +
+R.transpose() * R\_pp} (\texttt{trajectory\_generator.cpp} lines 370--372). Note the
+implementation also carries $\dot T$ and the yaw-acceleration $\ddot\psi$ through the same
+product-rule chain; \Cref{eq:wdot} is the condensed form.
 
 \section{Feasibility}
-% TODO(deepseek): the flat trajectory is dynamically feasible iff the recovered u lies in the
-% actuator set. Give the inequality that isDynamicallyFeasible() checks, and work one concrete
-% example: the 3 m / 5 s figure-8 on the X500, showing the peak per-rotor thrust against the
-% 8.55 N limit.
+\label{sec:feas}
+
+A flat trajectory is dynamically feasible iff the recovered input lies in the actuator set
+for all $t$. The implementation's \texttt{isDynamicallyFeasible()} samples at 200 Hz over
+one period (plus ramp-in) and checks
+\begin{equation}
+  \max_t \| \dot{\bm p}(t) \| \le v_{\max} (1 + 10^{-3}),
+  \qquad
+  \max_t \| \ddot{\bm p}(t) \| \le a_{\max} (1 + 10^{-3}),
+  \label{eq:feas}
+\end{equation}
+\begin{equation}
+  u_{\min}(1 - 10^{-3}) \le \max_t \frac{m \|\ddot{\bm p}(t) + g \bm e_3\|}{4}
+  \le u_{\max}(1 + 10^{-3}),
+  \label{eq:feas2}
+\end{equation}
+using the collective-only bound $\max_t m\|\bm t\|/4$ (the torque trim is neglected; a
+conservative check on a vehicle with ample torque margin).
+
+\paragraph{Worked example: the 3 m / 5 s figure-8 on the X500.} With
+$x = A_x \sin \omega t$, $y = \frac{A_y}{2}\sin 2\omega t$, $\omega = 2\pi/5 \approx
+1.257$ rad/s, $A_x = A_y = 3$ m, $m = 2.0$ kg, $g = 9.80665$ m/s$^2$:
+\begin{align*}
+  \max_t \|\dot{\bm p}\| &= A_x \omega \sqrt{2} = 3 \cdot 1.257 \cdot 1.414
+    \approx 5.33\ \text{m/s} \le 8.0\ \text{m/s} \ \text{(OK)}, \\
+  \max_t \|\ddot{\bm p}\| &\approx 10.07\ \text{m/s}^2 \le 18.0\ \text{m/s}^2
+    \ \text{(OK)}, \\
+  \max_t \frac{m \|\ddot{\bm p} + g \bm e_3\|}{4} &= \frac{2.0 \cdot \sqrt{10.07^2 +
+    9.80665^2}}{4} \approx 7.03\ \text{N} \le 8.55\ \text{N} \ \text{(OK)},
+\end{align*}
+with peak bank $\arctan(\max\|\ddot{\bm p}\|/g) \approx 45.8^\circ$. The thrust-to-weight
+ratio of the X500 is $4 \times 8.55 / (2.0 \times 9.80665) = 1.74$; the figure-8 uses
+$7.03/8.55 = 82\%$ of the available per-rotor thrust at its peak, which is why the
+aggressive preset is the stress case for the README GIF but not a clipped one.
 
 \section{Minimum-snap trajectory generation}
-% TODO(deepseek): why minimising snap is the natural objective given the above (snap enters
-% the input); the QP; the C^4 continuity constraints; the closed-form solution structure.
-% Cite Mellinger & Kumar (2011) and Richter, Bry & Roy (2013) for the unconstrained
-% reformulation.
+
+The flatness map consumes $\bm\sigma$ up to the fourth derivative (the snap enters through
+\eqref{eq:wdot} via $R''$), so it is natural to generate trajectories that minimise snap
+while enforcing position and derivative continuity. For a single axis $p(t)$
+piecewise-polynomial with $M$ segments of order 7 (a minimum-jerk solution has order 5;
+minimum-snap needs order 7 to make the fourth derivative free):
+\begin{equation}
+  \min_{\{p_j(t)\}} \sum_{j=1}^{M} \int_0^{T_j} \left( p_j^{(4)}(t) \right)^2 dt,
+  \qquad
+  \text{s.t. } p_j^{(k)}(T_j) = p_{j+1}^{(k)}(0),\ k = 0..4,
+  \label{eq:snapQP}
+\end{equation}
+with the boundary conditions $p_1^{(k)}(0)$ and $p_M^{(k)}(T_M)$ fixed by the start and goal
+states. This is a convex QP in the polynomial coefficients; Mellinger \& Kumar (2011) solve
+it directly and Richter, Bry \& Roy (2013) give the unconstrained reformulation used for
+waypoint-time allocation. The $C^4$ segment-to-segment continuity in
+\eqref{eq:snapQP} is exactly what \texttt{buildMinimumSnap()} enforces in
+\texttt{trajectory\_generator.cpp}, and it is the same continuity the flatness map needs:
+a discontinuity in $\bm\sigma^{(4)}$ would appear as a jump in the commanded torque.
 
 \section{Correspondence to the implementation}
-% TODO(deepseek): a table mapping each equation number to the function and line in
-% trajectory_generator.cpp. Keep it updated — a stale table is worse than none.
+\label{sec:table}
+
+\begin{table}[h]
+\centering
+\caption{Equation-to-code map. Stale tables are worse than none — keep this current when
+either side changes.}
+\label{tab:flatmap}
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+Equation & Function & Location \\
+\midrule
+\eqref{eq:flatout} & \texttt{FlatState} & \texttt{trajectory\_generator.hpp} \\
+\eqref{eq:tvec}, \eqref{eq:zb}, \eqref{eq:T} & \texttt{flatToStateInput} & \texttt{trajectory\_generator.cpp} L274--279, 302 \\
+\eqref{eq:yb}, \eqref{eq:xb} & \texttt{flatToStateInput} & L304--322 (incl.\ degenerate branch) \\
+\eqref{eq:Tdot}--\eqref{eq:wz} & \texttt{flatToStateInput} & L330--349 \\
+\eqref{eq:wdot}, \eqref{eq:tau} & \texttt{flatToStateInput} & L370--382 \\
+\eqref{eq:feas}, \eqref{eq:feas2} & \texttt{isDynamicallyFeasible} & L480--520 \\
+\eqref{eq:snapQP} & \texttt{buildMinimumSnap} & L570--660 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \end{document}

@@ -1,5 +1,4 @@
-# SKELETON — the structure is complete, the acados/target wiring marked TODO is not.
-# See .deepseek/03_BUILD_SYSTEM.md §3.
+# Build system for the uav_mpc package. See .deepseek/03_BUILD_SYSTEM.md §3.
 cmake_minimum_required(VERSION 3.16)
 project(uav_mpc LANGUAGES C CXX)
 
@@ -34,7 +33,17 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
-find_package(px4_msgs REQUIRED)
+# px4_msgs is OPTIONAL: the node needs it, the core library + tests do not. Builds without
+# px4_msgs produce the core library and tests only; to enable the node targets, install it:
+#   git clone https://github.com/PX4/px4_msgs.git <ros2_ws>/src/px4_msgs
+#   cd <ros2_ws> && colcon build --packages-select px4_msgs
+find_package(px4_msgs QUIET)
+if(px4_msgs_FOUND)
+  message(STATUS "px4_msgs found — building the nmpc_node component + executable")
+else()
+  message(STATUS "px4_msgs NOT found — SKIPPING the nmpc_node component + executable "
+                  "(install px4_msgs to enable; core library and tests still build)")
+endif()
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
@@ -42,15 +51,57 @@ find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(yaml_cpp_vendor REQUIRED)
 
-# TODO(deepseek): locate acados.
-#   - honour ${ACADOS_SOURCE_DIR} from the environment; error out with an actionable message
-#     if UAV_MPC_WITH_ACADOS is ON and it is unset
-#   - ACADOS_INCLUDE_DIRS = ${ACADOS_SOURCE_DIR}/include, .../include/blasfeo/include,
-#     .../include/hpipm/include
-#   - the generated tree lives in ${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen_output/c_generated_code
-#   - import libacados.so, libblasfeo.so, libhpipm.so as IMPORTED targets
-#   - add a custom command that re-runs codegen/generate_acados_solver.py when
-#     codegen/quadrotor_model.py or config/nmpc_params.yaml is newer than the generated code
+# ------------------------------------------------------------------------------------------------
+# acados (§3.1) and the generated solver
+# ------------------------------------------------------------------------------------------------
+set(CODEGEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../codegen)
+set(GENERATED_SOLVER_DIR ${CODEGEN_DIR}/codegen_output/c_generated_code)
+
+if(UAV_MPC_WITH_ACADOS)
+  if(NOT DEFINED ENV{ACADOS_SOURCE_DIR})
+    message(FATAL_ERROR
+      "UAV_MPC_WITH_ACADOS is ON but ACADOS_SOURCE_DIR is not set. Install acados from "
+      "source and export ACADOS_SOURCE_DIR (see .deepseek/02_ENVIRONMENT.md). "
+      "To build the stub backend instead, configure with -DUAV_MPC_WITH_ACADOS=OFF.")
+  endif()
+  set(ACADOS_SOURCE_DIR $ENV{ACADOS_SOURCE_DIR})
+  set(ACADOS_INCLUDE_DIRS
+    ${ACADOS_SOURCE_DIR}/include
+    ${ACADOS_SOURCE_DIR}/include/blasfeo/include
+    ${ACADOS_SOURCE_DIR}/include/hpipm/include
+  )
+
+  # Import the prebuilt acados runtime libraries.
+  add_library(libacados SHARED IMPORTED)
+  set_target_properties(libacados PROPERTIES IMPORTED_LOCATION ${ACADOS_SOURCE_DIR}/lib/libacados.so)
+  add_library(libblasfeo SHARED IMPORTED)
+  set_target_properties(libblasfeo PROPERTIES IMPORTED_LOCATION ${ACADOS_SOURCE_DIR}/lib/libblasfeo.so)
+  add_library(libhpipm SHARED IMPORTED)
+  set_target_properties(libhpipm PROPERTIES IMPORTED_LOCATION ${ACADOS_SOURCE_DIR}/lib/libhpipm.so)
+
+  # The generated solver library (codegen/generate_acados_solver.py).
+  add_library(libacados_ocp_solver_quadrotor SHARED IMPORTED)
+  set_target_properties(libacados_ocp_solver_quadrotor PROPERTIES
+    IMPORTED_LOCATION ${GENERATED_SOLVER_DIR}/libacados_ocp_solver_quadrotor.so)
+
+  # Regenerate whenever the model or the structural config changes. Skipped in CI: the
+  # check-only job re-runs codegen to a temp dir and diffs (see .deepseek/14_CI.md §14.1).
+  if(NOT DEFINED ENV{CI})
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_custom_command(
+      OUTPUT ${GENERATED_SOLVER_DIR}/acados_solver_quadrotor.c
+      COMMAND ${Python3_EXECUTABLE} generate_acados_solver.py
+      WORKING_DIRECTORY ${CODEGEN_DIR}
+      DEPENDS
+        ${CODEGEN_DIR}/quadrotor_model.py
+        ${CODEGEN_DIR}/generate_acados_solver.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/config/nmpc_params.yaml
+      VERBATIM
+      COMMENT "Regenerating acados solver (codegen/generate_acados_solver.py)"
+    )
+    add_custom_target(uav_mpc_codegen DEPENDS ${GENERATED_SOLVER_DIR}/acados_solver_quadrotor.c)
+  endif()
+endif()
 
 # ------------------------------------------------------------------------------------------------
 # Interfaces
@@ -77,39 +128,67 @@ target_include_directories(${PROJECT_NAME}_core PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(${PROJECT_NAME}_core Eigen3 yaml_cpp_vendor)
-# TODO(deepseek): when UAV_MPC_WITH_ACADOS, add the acados include dirs + link the
-# generated solver library, and target_compile_definitions(... PRIVATE UAV_MPC_WITH_ACADOS).
+if(UAV_MPC_WITH_ACADOS)
+  target_include_directories(${PROJECT_NAME}_core PRIVATE
+    ${ACADOS_INCLUDE_DIRS}
+    ${GENERATED_SOLVER_DIR}
+    ${CODEGEN_DIR}/codegen_output/include   # model_hash.h
+  )
+  # PUBLIC so test_nmpc_solve_time can skip when the stub backend is built.
+  target_compile_definitions(${PROJECT_NAME}_core PUBLIC UAV_MPC_WITH_ACADOS)
+  target_link_libraries(${PROJECT_NAME}_core
+    libacados libblasfeo libhpipm libacados_ocp_solver_quadrotor)
+  if(TARGET uav_mpc_codegen)
+    add_dependencies(${PROJECT_NAME}_core uav_mpc_codegen)
+  endif()
+endif()
+# acados_wrapper.cpp reads codegen/MODEL_HASH for the stale-solver guard (§6.7).
+target_compile_definitions(${PROJECT_NAME}_core PRIVATE
+  UAV_MPC_CODEGEN_DIR="${CODEGEN_DIR}"
+)
 
 # ------------------------------------------------------------------------------------------------
-# Node (component + executable)
+# Node (component + executable) — requires px4_msgs (find_package(px4_msgs QUIET) above)
 # ------------------------------------------------------------------------------------------------
-add_library(nmpc_component SHARED src/nmpc_node.cpp)
-target_link_libraries(nmpc_component ${PROJECT_NAME}_core)
-ament_target_dependencies(nmpc_component
-  rclcpp rclcpp_lifecycle rclcpp_components lifecycle_msgs
-  std_msgs geometry_msgs nav_msgs px4_msgs tf2 tf2_ros tf2_eigen Eigen3
-)
-rclcpp_components_register_node(nmpc_component
-  PLUGIN "uav_mpc::NmpcNode"
-  EXECUTABLE nmpc_node_component
-)
-# Link the node against this package's own generated interfaces.
-rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
-target_link_libraries(nmpc_component "${cpp_typesupport_target}")
+if(px4_msgs_FOUND)
+  add_library(nmpc_component SHARED src/nmpc_node.cpp)
+  target_link_libraries(nmpc_component ${PROJECT_NAME}_core)
+  ament_target_dependencies(nmpc_component
+    rclcpp rclcpp_lifecycle rclcpp_components lifecycle_msgs
+    std_msgs geometry_msgs nav_msgs px4_msgs tf2 tf2_ros tf2_eigen Eigen3
+  )
+  rclcpp_components_register_node(nmpc_component
+    PLUGIN "uav_mpc::NmpcNode"
+    EXECUTABLE nmpc_node_component
+  )
+  # Link the node against this package's own generated interfaces.
+  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
+  target_link_libraries(nmpc_component "${cpp_typesupport_target}")
 
-add_executable(nmpc_node src/main.cpp)
-target_link_libraries(nmpc_node nmpc_component ${PROJECT_NAME}_core)
-ament_target_dependencies(nmpc_node rclcpp rclcpp_lifecycle)
+  add_executable(nmpc_node src/main.cpp)
+  target_link_libraries(nmpc_node nmpc_component ${PROJECT_NAME}_core)
+  ament_target_dependencies(nmpc_node rclcpp rclcpp_lifecycle)
+else()
+  # Keep the typesupport target name from dangling when the node is skipped.
+  set(cpp_typesupport_target "")
+endif()
 
 # ------------------------------------------------------------------------------------------------
 # Install
 # ------------------------------------------------------------------------------------------------
-install(TARGETS ${PROJECT_NAME}_core nmpc_component
+install(TARGETS ${PROJECT_NAME}_core
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
-install(TARGETS nmpc_node DESTINATION lib/${PROJECT_NAME})
+if(px4_msgs_FOUND)
+  install(TARGETS nmpc_component
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+  )
+  install(TARGETS nmpc_node DESTINATION lib/${PROJECT_NAME})
+endif()
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch config params rviz DESTINATION share/${PROJECT_NAME})
 
@@ -127,12 +206,31 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_nmpc_solve_time test/test_nmpc_solve_time.cpp)
   target_link_libraries(test_nmpc_solve_time ${PROJECT_NAME}_core)
+  ament_target_dependencies(test_nmpc_solve_time Eigen3 yaml_cpp_vendor)
+  target_compile_definitions(test_nmpc_solve_time PRIVATE
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    UAV_MPC_CODEGEN_DIR="${CODEGEN_DIR}"
+  )
 
   ament_add_gtest(test_trajectory_continuity test/test_trajectory_continuity.cpp)
   target_link_libraries(test_trajectory_continuity ${PROJECT_NAME}_core)
+  target_compile_definitions(test_trajectory_continuity PRIVATE
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
-  # TODO(deepseek): add test/test_dynamics.cpp (finite-difference Jacobian check) and
-  # test/test_frame_conversions.cpp (ENU<->NED round-trip) once the core is implemented.
+  # M1: finite-difference Jacobian check + ENU<->NED round-trips (§10.4).
+  ament_add_gtest(test_dynamics test/test_dynamics.cpp)
+  target_link_libraries(test_dynamics ${PROJECT_NAME}_core)
+  target_compile_definitions(test_dynamics PRIVATE
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+  ament_add_gtest(test_frame_conversions test/test_frame_conversions.cpp)
+  target_link_libraries(test_frame_conversions ${PROJECT_NAME}_core)
+
+  # Helper binary used by test_acados_codegen.py to compare CasADi against C++ (§10.3).
+  add_executable(dynamics_probe test/dynamics_probe.cpp)
+  target_link_libraries(dynamics_probe ${PROJECT_NAME}_core)
+  target_compile_definitions(dynamics_probe PRIVATE
+    UAV_MPC_DEFAULT_AIRFRAME_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/params/x500_calibration.yaml")
 
   ament_add_pytest_test(test_acados_codegen test/test_acados_codegen.py
     TIMEOUT 600
@@ -141,6 +239,12 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_include_directories(include)
-ament_export_libraries(${PROJECT_NAME}_core nmpc_component)
-ament_export_dependencies(rclcpp rclcpp_lifecycle px4_msgs Eigen3 rosidl_default_runtime)
+ament_export_libraries(${PROJECT_NAME}_core)
+if(px4_msgs_FOUND)
+  ament_export_libraries(nmpc_component)
+endif()
+ament_export_dependencies(rclcpp rclcpp_lifecycle Eigen3 rosidl_default_runtime)
+if(px4_msgs_FOUND)
+  ament_export_dependencies(px4_msgs)
+endif()
 ament_package()

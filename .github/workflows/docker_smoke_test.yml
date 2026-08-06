@@ -2,11 +2,15 @@
 #
 # THE differentiating CI job: PX4 SITL + Gazebo + the NMPC node actually fly a hover, headless,
 # inside the container, and the job asserts on the resulting tracking error. Most candidate
-# repos do not build; this one flies autonomously in CI.
+# repos do not build; this one flies autonomously in CI. See .deepseek/14_CI.md §14.3.
 #
-# Expect this to be the flakiest workflow in the repo. Budget real effort for making it
-# deterministic (fixed seeds, lockstep sim time, generous but bounded timeouts) — a smoke test
-# that fails 30% of the time trains everyone to ignore red, which is worse than not having it.
+# Determinism is the budget here: fixed seeds, bounded timeouts, no sleep-and-hope. A smoke
+# test that fails 30% of the time trains everyone to ignore red, which is worse than not
+# having one.
+#
+# The sim image (PX4 + Gazebo Jetty + acados layered on ros:lyrical-ros-base) is BUILT by a
+# separate manually-triggered workflow and published to GHCR; this workflow only pulls. If the
+# pull fails, run that workflow first — building PX4 on every push would make this 40 minutes.
 
 name: docker smoke test
 
@@ -23,56 +27,132 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # TODO(deepseek): pin these to the exact versions you test against, and reference the same
-  # values from colcon_build.yml (px4_msgs must match PX4).
+  # Pinned in ONE place: this file. colcon_build.yml mirrors PX4_VERSION and verifies the
+  # mirror cannot drift (see its "Verify px4_msgs branch" step). px4_msgs MUST match PX4.
   # NOTE: Lyrical Luth is a young distro. Every pin below is a forward-looking guess — verify
-  # each one against the release notes before trusting it. See .deepseek/02_ENVIRONMENT.md §2.1.
+  # each one against the release notes before trusting it (.deepseek/02_ENVIRONMENT.md §2.1).
   PX4_VERSION: "v1.16.0"     # UNVERIFIED — confirm which release supports Gazebo Jetty
   GZ_VERSION: "jetty"        # UNVERIFIED — confirm the Lyrical pairing in REP-2000
   ROS_DISTRO: "lyrical"
+  SIM_IMAGE: ghcr.io/${{ github.repository }}:sitl-lyrical
+  # acados is layered into the sim image at /opt/acados (see the image-build workflow).
+  ACADOS_SOURCE_DIR: /opt/acados
 
 jobs:
   hover:
     name: 10 s autonomous hover in SITL
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest   # the sim container determines the environment (risk V1)
+    container:
+      image: ${{ env.SIM_IMAGE }}
+      options: --shm-size=1g
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: src/uav-mpc
 
-      # TODO(deepseek): build (or pull) the sim image. A committed docker/Dockerfile.sitl that
-      # layers PX4 + Gazebo Jetty + acados onto ros:lyrical is the maintainable option;
-      # publish it to GHCR from a separate manually-triggered workflow so this job only pulls.
-      # Building PX4 from source on every push will make this job take 40 minutes.
+      - name: Run the hover scenario
+        run: |
+          set -euxo pipefail
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          export ACADOS_SOURCE_DIR
+          export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
+          export ROS_DOMAIN_ID=42
+          colcon build --event-handlers console_direct+ \
+            --cmake-args -DCMAKE_BUILD_TYPE=Release
+          source install/setup.bash
+          mkdir -p artifacts
+          ros2 bag record -o artifacts/ci_hover_bag \
+            /nmpc_node/status \
+            /fmu/out/vehicle_local_position \
+            /fmu/out/vehicle_attitude \
+            /fmu/in/vehicle_attitude_setpoint \
+            > artifacts/bag.log 2>&1 &
+          BAG_PID=$!
+          # 1.5 m at 0.5 m/s takeoff ramp + 10 s steady state + margin for sim boot.
+          timeout 150 ros2 launch uav_mpc sitl.launch.py \
+            headless:=true auto_arm:=true trajectory:=hover rviz:=false \
+            > artifacts/launch.log 2>&1 &
+          LAUNCH_PID=$!
+          sleep 60
+          kill -INT $LAUNCH_PID $BAG_PID || true
+          wait $LAUNCH_PID || true
+          wait $BAG_PID || true
+          echo "--- launch.log tail ---"
+          tail -n 80 artifacts/launch.log || true
 
-      # TODO(deepseek): run the container with the workspace mounted, then inside it:
-      #   1. colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-      #   2. launch: ros2 launch uav_mpc sitl.launch.py headless:=true auto_arm:=true \
-      #        trajectory:=hover rviz:=false
-      #   3. record a bag of /nmpc_node/status and /fmu/out/vehicle_local_position
-      #   4. wait for takeoff, then hold for 10 s of steady-state
-      #   5. SIGINT everything and collect the bag
+      - name: Assert hover metrics
+        run: |
+          set -euxo pipefail
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          # The assertions live in scripts/assert_hover.py so they run locally too.
+          # Thresholds below are the §14.3 acceptance criteria (relaxed vs unit tests).
+          python src/uav-mpc/scripts/assert_hover.py artifacts/ci_hover_bag \
+            --window 10 --takeoff-altitude 1.5 --json artifacts/hover_metrics.json
 
-      # TODO(deepseek): assert, in a standalone script (scripts/assert_hover.py) so it can be
-      # run locally too:
-      #   - the controller reached STATE_TRACKING within 20 s
-      #   - RMS position error over the 10 s window < 0.15 m
-      #   - max position error < 0.30 m
-      #   - zero solver failures (SolverDiagnostics.status != SUCCESS count == 0)
-      #   - p99 solve time < 5 ms (relaxed vs the unit test: a CI runner is not a flight computer)
-      #   - the vehicle never dropped below 0.5 * takeoff_altitude
-      # Print every metric even on success — the numbers in the job log are the evidence.
-
-      # TODO(deepseek): always() upload the bag, the PX4 ulog and the node logs as artifacts.
-      # When this job fails you will have exactly one shot at diagnosing it from the artifacts.
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hover-artifacts
+          path: |
+            artifacts/
+            build/uav_mpc/test_results/**/*.xml
+          if-no-files-found: ignore
 
   figure8:
     name: 2 laps of a figure-8 in SITL
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest   # the sim container determines the environment (risk V1)
+    container:
+      image: ${{ env.SIM_IMAGE }}
+      options: --shm-size=1g
     timeout-minutes: 60
-    # TODO(deepseek): same shape as `hover`, with figure8.launch.py and looser thresholds
-    # (RMS < 0.25 m). Run on schedule + workflow_dispatch only, not on every push — keep the
-    # per-PR feedback loop short.
-    if: github.event_name != 'pull_request'
+    # Schedule + dispatch only, never on every push — keep the per-PR feedback loop short.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
-      # TODO(deepseek)
+        with:
+          path: src/uav-mpc
+
+      - name: Run the figure-8 scenario
+        run: |
+          set -euxo pipefail
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          export ACADOS_SOURCE_DIR
+          export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
+          export ROS_DOMAIN_ID=42
+          colcon build --event-handlers console_direct+ \
+            --cmake-args -DCMAKE_BUILD_TYPE=Release
+          source install/setup.bash
+          mkdir -p artifacts
+          # Two full 8 s laps after the 12 s takeoff allowance, plus margin.
+          timeout 180 ros2 launch uav_mpc figure8.launch.py \
+            record:=true aggressive:=false laps:=2 takeoff_wait:=12.0 \
+            headless:=true rviz:=false \
+            > artifacts/launch.log 2>&1 &
+          LAUNCH_PID=$!
+          sleep 90
+          kill -INT $LAUNCH_PID || true
+          wait $LAUNCH_PID || true
+          echo "--- launch.log tail ---"
+          tail -n 80 artifacts/launch.log || true
+          bag_dir=$(ls -d artifacts/figure8_* 2>/dev/null | head -1 || true)
+          [ -n "$bag_dir" ] || { echo "::error::no figure8 bag was recorded"; exit 1; }
+          echo "bag=$bag_dir" >> "$GITHUB_ENV"
+
+      - name: Assert figure-8 metrics
+        run: |
+          set -euxo pipefail
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          # Looser position thresholds than hover: RMS < 0.25 m (§14.3).
+          python src/uav-mpc/scripts/assert_hover.py "$bag" \
+            --window 10 --takeoff-altitude 1.5 --max-rms 0.25 \
+            --json artifacts/figure8_metrics.json
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: figure8-artifacts
+          path: artifacts/
+          if-no-files-found: ignore

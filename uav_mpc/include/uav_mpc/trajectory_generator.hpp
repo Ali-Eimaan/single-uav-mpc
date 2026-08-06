@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See .deepseek/05_TRAJECTORY.md §5.
+// See .deepseek/05_TRAJECTORY.md §5.
 //
 // Minimum-snap polynomial trajectory generation (Mellinger & Kumar, ICRA 2011) plus closed-form
 // analytic primitives (figure-8 / lemniscate / circle). Produces a flat-output reference
@@ -89,47 +89,38 @@ public:
 
   /// Rebuild the internal representation. For analytic types this is O(1); for Waypoints it
   /// solves the banded QP / closed-form linear system of §5.3. Throws on infeasible input.
-  // TODO(deepseek): implement
   void generate();
 
   /// Update parameters and regenerate.
-  // TODO(deepseek): implement
   void setParams(const TrajectoryParams & params);
 
   /// Flat outputs at absolute trajectory time t [s]. Clamps to [0, duration()] for
   /// non-periodic types; wraps for periodic ones.
-  // TODO(deepseek): implement
   FlatState sample(double t) const;
 
   /// Sample the whole prediction horizon in one call: t0, t0+dt, ..., t0+N*dt.
   /// Returns N+1 entries. This is what nmpc_node calls every control tick.
-  // TODO(deepseek): implement
   std::vector<FlatState> sampleHorizon(double t0, double dt, int n_steps) const;
 
   /// Differential-flatness map: flat outputs -> (state, input) reference.
   /// See docs/derivations/differential_flatness.tex. Needs the airframe to convert the
   /// required body wrench into per-rotor thrusts.
-  // TODO(deepseek): implement
   static StateInputReference flatToStateInput(
     const FlatState & flat, const QuadrotorParams & airframe, AttitudeRep rep);
 
   /// Convenience: horizon of full references, ready to memcpy into the acados yref buffers.
-  // TODO(deepseek): implement
   std::vector<StateInputReference> referenceHorizon(
     double t0, double dt, int n_steps, const QuadrotorParams & airframe, AttitudeRep rep) const;
 
   /// [s] total duration; std::numeric_limits<double>::infinity() for periodic types.
-  // TODO(deepseek): implement
   double duration() const;
 
   /// True if every sampled point respects max_velocity / max_acceleration and the thrust
   /// envelope of `airframe`. Called once after generate(); logged as a warning, not fatal.
-  // TODO(deepseek): implement
   bool isDynamicallyFeasible(const QuadrotorParams & airframe, std::string * report = nullptr) const;
 
   /// C^4 continuity check across all segment boundaries; used by
   /// test/test_trajectory_continuity.cpp.
-  // TODO(deepseek): implement
   double maxDerivativeJump(int derivative_order) const;
 
   const TrajectoryParams & params() const {return params_;}
@@ -139,29 +130,23 @@ private:
   std::vector<PolynomialSegment> segments_;
 
   // --- analytic primitives -------------------------------------------------------------------
-  // TODO(deepseek): implement
   FlatState sampleFigure8(double t) const;
-  // TODO(deepseek): implement
   FlatState sampleLemniscate(double t) const;
-  // TODO(deepseek): implement
   FlatState sampleCircle(double t) const;
-  // TODO(deepseek): implement
   FlatState sampleHover(double t) const;
-  // TODO(deepseek): implement
   FlatState sampleStep(double t) const;
 
   // --- minimum snap --------------------------------------------------------------------------
-  // TODO(deepseek): implement — builds the QP and solves for `segments_`.
+  // Builds the QP and solves for `segments_` (dense KKT via Eigen LDLT, FullPivLU fallback).
   void buildMinimumSnap();
-  // TODO(deepseek): implement — heuristic time allocation when segment_times is empty.
+  // Heuristic time allocation when segment_times is empty (§5.4).
   std::vector<double> allocateSegmentTimes() const;
-  // TODO(deepseek): implement — evaluates segment `idx` at local time `tau` in [0, 1].
+  // Evaluates segment `idx` at local time `tau` in [0, 1] (chain rule /T^k applied).
   FlatState evaluateSegment(std::size_t idx, double tau) const;
 
   /// Smooth 0->1 blend applied during the first `ramp_in_time` seconds so the vehicle does not
   /// step-jump onto the orbit. Must be C^4 (use a 9th-order smoothstep) or the flatness map
   /// produces a jerk spike.
-  // TODO(deepseek): implement
   static double rampScale(double t, double ramp_time, int derivative_order);
 };
 

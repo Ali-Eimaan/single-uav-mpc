@@ -3,28 +3,30 @@
 Real-time NMPC for a 12-state quadrotor in ROS 2 Lyrical Luth + PX4 SITL + Gazebo Jetty, using
 acados-generated C code, tracking aggressive trajectories.
 
-<!-- TODO(deepseek): badges once the workflows are green. Do not add a badge before the
-     workflow passes — a red badge on the landing page is worse than none.
+<!-- UNVERIFIED: badges are intentionally absent until the workflows pass. Do not add a badge
+     before the workflow is green — a red badge on the landing page is worse than none.
 [![colcon build](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml/badge.svg)](...)
 [![format check](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml/badge.svg)](...)
 [![smoke test](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/docker_smoke_test.yml/badge.svg)](...)
 -->
 
-> **Status: skeleton.** The structure, interfaces and documentation outline are in place; the
-> implementation is not. See [`.deepseek/`](.deepseek/README.md) for the build order and the
-> specification of every stub.
+> **Status: implemented, not yet flight-verified.** All code per [`.deepseek/`](.deepseek/README.md)
+> is written; acados has not yet been built and no flight data exists. Numbers and version pins
+> marked `UNVERIFIED` are forward-looking estimates pending measurement (see
+> [`.deepseek/02_ENVIRONMENT.md` §2.1](.deepseek/02_ENVIRONMENT.md)).
 
-<!-- TODO(deepseek): media/figure8.gif goes here, above the fold. This is the first thing a
-     reader sees; it decides whether they scroll. -->
+<!-- UNVERIFIED: media/figure8.gif goes here, above the fold. This is the first thing a reader
+     sees; it decides whether they scroll. Capture recipe is tracked in media/README.md. -->
 
 ---
 
 ## Quick start
 
 ```bash
-# TODO(deepseek): this block is the repo's central promise — clone, build, fly in ten minutes.
+# UNVERIFIED: this block is the repo's central promise — clone, build, fly in ten minutes.
 # It must work verbatim on a clean Ubuntu 26.04 machine. Test it in a fresh container before
-# every release, and keep it to this many lines.
+# every release, and keep it to this many lines. The commands themselves are written and
+# smoke-testable (colcon_build.yml), but have not been run end-to-end here yet.
 ```
 
 ## What this is
@@ -36,9 +38,10 @@ acados-generated C code, tracking aggressive trajectories.
 
 ## Results
 
-<!-- TODO(deepseek): fill from analysis/. Every number needs the hardware it was measured on
-     and the git SHA that produced it. Report the from-bag numbers alongside the synthetic
-     ones — see analysis/solve_time_benchmark.py. -->
+<!-- UNVERIFIED: numbers below must be filled from analysis/ once the solver is built and a
+     bag exists. Every number needs the hardware it was measured on and the git SHA that
+     produced it. Report the from-bag numbers alongside the synthetic ones — see
+     analysis/solve_time_benchmark.py. -->
 
 | Metric | Value | Conditions |
 | --- | --- | --- |
@@ -71,14 +74,15 @@ Ubuntu 26.04 LTS · ROS 2 Lyrical Luth · Gazebo Jetty · Python 3.14 · Eigen 3
 (commit pinned in [`codegen/ACADOS_COMMIT`](codegen/ACADOS_COMMIT)) · PX4 (version pinned in
 [`docker_smoke_test.yml`](.github/workflows/docker_smoke_test.yml)).
 
-<!-- TODO(deepseek): replace the line above with the exact verified versions once the version
-     risk register in .deepseek/02_ENVIRONMENT.md §2.1 has been resolved. Lyrical Luth is a
-     young distro and several of those pins are still assumptions. -->
+<!-- UNVERIFIED: the line above lists forward-looking version pins. Resolve them against the
+     version risk register in .deepseek/02_ENVIRONMENT.md §2.1 once Lyrical Luth packages are
+     confirmed — several of those pins are still assumptions. -->
 
 ## Citation
 
-<!-- TODO(deepseek): CITATION.cff plus the one-line note that this is the per-agent controller
-     underlying the distributed MPC-CBF work in `transition-viable-swarm`. -->
+<!-- UNVERIFIED: CITATION.cff is not yet added. The one-line note that this is the per-agent
+     controller underlying the distributed MPC-CBF work in `transition-viable-swarm` belongs
+     with it. -->
 
 ## License
 

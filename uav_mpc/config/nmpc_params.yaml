@@ -28,7 +28,8 @@
     # even though nx = 13. Residual order:
     #   [px py pz | vx vy vz | e_qx e_qy e_qz | wx wy wz]  (+ [T1..T4] for the stage cost)
     # Starting values come from the Bryson rule, w_i = 1 / dev_max_i^2, with the deviation
-    # table in docs/TUNING_GUIDE.md §1. TODO(deepseek): not yet tuned against a real solve.
+    # table in docs/TUNING_GUIDE.md §1. UNVERIFIED: not yet tuned against a real solve —
+    # expected to need retuning once the solver is built and flown.
     # ---------------------------------------------------------------------------------------
     q_diag:   [200.0, 200.0, 400.0,    # position        [1/m^2]
                 10.0,  10.0,  20.0,    # velocity        [1/(m/s)^2]

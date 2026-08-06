@@ -1,6 +1,6 @@
 # Bitcraze Crazyflie 2.1 — the indoor micro-quad target.
 #
-# SKELETON. TODO(deepseek): values below come from the Bitcraze published specifications and
+# UNVERIFIED: values below come from the Bitcraze published specifications and
 # the widely cited system-identification papers (Förster 2015 MSc thesis; Landry 2015). Verify
 # and cite each number in a trailing comment before v1.0. Do NOT invent numbers here — a
 # fabricated inertia tensor is exactly the kind of thing a hardware advisor spots.
@@ -8,7 +8,7 @@
 airframe:
   name: "crazyflie21"
   source: "Bitcraze CF2.1 datasheet; Foerster (2015) motor identification"
-  verified: false            # TODO(deepseek): flip to true once cross-checked
+  verified: false            # UNVERIFIED: flip to true once cross-checked
 
   # --- mass properties ---------------------------------------------------------------------
   mass: 0.027                 # [kg] 27 g with the standard battery

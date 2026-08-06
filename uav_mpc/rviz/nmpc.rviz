@@ -1,8 +1,6 @@
-# SKELETON — placeholder RViz config referenced by launch/sitl.launch.py.
-#
-# TODO(deepseek): replace this file wholesale with a real config SAVED FROM RVIZ, not
-# hand-written. Set up the view once and use File > Save Config As. Hand-edited .rviz files
-# are a reliable source of silent load failures.
+# UNVERIFIED placeholder — referenced by launch/sitl.launch.py. Replace this file wholesale
+# with a real config SAVED FROM RVIZ, not hand-written. Set up the view once and use
+# File > Save Config As. Hand-edited .rviz files are a reliable source of silent load failures.
 #
 # The saved config must contain:
 #   - Fixed Frame: map   (ENU; the node publishes its paths in this frame)

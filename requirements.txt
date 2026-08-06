@@ -8,7 +8,7 @@
 #   python3 -m venv --system-site-packages .venv
 #   . .venv/bin/activate && pip install -r requirements.txt
 #
-# TODO(deepseek): EVERY pin below is a forward-looking guess. Before trusting them, confirm
+# UNVERIFIED: every pin below is a forward-looking guess. Before trusting them, confirm
 # each package publishes a cp314 wheel for linux-x86_64 — building casadi or scipy from source
 # in CI turns a 5-minute job into a 30-minute one. Where no cp314 wheel exists yet, pin the
 # newest version that does and record the constraint in a trailing comment.
@@ -29,8 +29,8 @@ seaborn==0.13.2
 
 # --- rosbag reading for analysis notebooks ---
 # rosbags is a pure-python reader; avoids needing a sourced ROS env in Jupyter.
-# TODO(deepseek): confirm the version that understands the rosbag2 storage format shipped
-# with Lyrical Luth — the default storage plugin has changed across distros before.
+# UNVERIFIED: version below is a guess at the one that understands the rosbag2 storage format
+# shipped with Lyrical Luth — the default storage plugin has changed across distros before.
 rosbags==0.10.9        # UNVERIFIED against the Lyrical rosbag2 format
 
 # --- dev ---

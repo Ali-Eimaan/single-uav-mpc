@@ -80,11 +80,9 @@ public:
   /// `config` and that the model hash in the generated code matches codegen/MODEL_HASH.
   /// Returns false (and fills `error`) instead of throwing, so the lifecycle node can report
   /// FAILURE from on_configure().
-  // TODO(deepseek): implement
   bool initialise(const SolverConfig & config, std::string * error = nullptr);
 
   /// Free the capsule. Safe to call twice. Called from on_cleanup()/destructor.
-  // TODO(deepseek): implement
   void shutdown();
 
   bool isInitialised() const {return initialised_;}
@@ -92,31 +90,26 @@ public:
   // --- problem data --------------------------------------------------------------------------
 
   /// Set lbx_0 = ubx_0 = x0 (the initial-state equality constraint).
-  // TODO(deepseek): implement
   void setInitialState(const Eigen::VectorXd & x0);
 
   /// Stage references, stage in [0, N-1]: yref = [x_ref; u_ref] of size nx+nu.
-  // TODO(deepseek): implement
   void setStageReference(int stage, const Eigen::VectorXd & x_ref, const Eigen::VectorXd & u_ref);
 
   /// Terminal reference: yref_e = x_ref, size nx.
-  // TODO(deepseek): implement
   void setTerminalReference(const Eigen::VectorXd & x_ref);
 
   /// Convenience for the whole horizon; sizes must be N (inputs) and N+1 (states).
-  // TODO(deepseek): implement
   void setReferenceHorizon(
     const std::vector<Eigen::VectorXd> & x_refs, const std::vector<Eigen::VectorXd> & u_refs);
 
   /// Online parameters p (per stage) — used for the wind/disturbance estimate and the
   /// time-varying mass if enabled in the model. Size must equal np from codegen.
-  // TODO(deepseek): implement
   void setParameters(const Eigen::VectorXd & p);
 
   /// Update the diagonal cost weights at runtime (W, W_e). Cheap enough for a param callback,
-  /// too slow for every tick.
-  // TODO(deepseek): implement
-  void setWeights(
+  /// too slow for every tick. Returns false (and leaves the weights unchanged) if any
+  /// diagonal is negative or the terminal weight is smaller than the stage weight elementwise.
+  bool setWeights(
     const Eigen::VectorXd & q_diag, const Eigen::VectorXd & r_diag,
     const Eigen::VectorXd & q_terminal_diag);
 
@@ -125,28 +118,22 @@ public:
   /// One RTI solve. Never throws. On failure applies the recovery policy of §6.5:
   ///   1st failure  -> re-solve once from a hover-initialised guess
   ///   Nth failure  -> report and let the caller fall back
-  // TODO(deepseek): implement
   SolveResult solve();
 
   /// First optimal input u_0 [N per rotor]. Valid only after an ok() solve.
-  // TODO(deepseek): implement
   Eigen::VectorXd optimalInput() const;
 
   /// Predicted state at `stage` in [0, N]. Used for the RViz predicted-path marker.
-  // TODO(deepseek): implement
   Eigen::VectorXd predictedState(int stage) const;
 
   /// Whole predicted state trajectory, N+1 entries.
-  // TODO(deepseek): implement
   std::vector<Eigen::VectorXd> predictedTrajectory() const;
 
   /// Reset every stage of the primal guess to a hover trim about `x0`, and zero the duals.
   /// Called on infeasibility and whenever the controller is (re-)activated.
-  // TODO(deepseek): implement
   void resetToHover(const Eigen::VectorXd & x0, double hover_thrust_per_rotor);
 
   /// Shift the previous solution one stage forward (x_k <- x_{k+1}) as the warm start.
-  // TODO(deepseek): implement
   void shiftWarmStart();
 
   // --- introspection -------------------------------------------------------------------------
@@ -159,7 +146,6 @@ public:
 
   /// Model hash baked into the generated code; compared against codegen/MODEL_HASH so a stale
   /// solver can never be silently flown.
-  // TODO(deepseek): implement
   static std::string generatedModelHash();
 
 private:

@@ -1,12 +1,11 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See .deepseek/04_DYNAMICS.md §4.
-//
-// Templated 12/13-state quadrotor rigid-body dynamics on SE(3).
-// The same equations are mirrored symbolically in codegen/quadrotor_model.py; the C++ version
-// here is the *ground truth* used by the simulation-free unit tests and by the internal
-// forward-integration used for one-step state prediction (latency compensation).
+// Declarations for the templated 12/13-state quadrotor rigid-body dynamics on SE(3).
+// See .deepseek/04_DYNAMICS.md §4. The same equations are mirrored symbolically in
+// codegen/quadrotor_model.py; the C++ version here is the *ground truth* used by the
+// simulation-free unit tests and by the internal forward-integration used for one-step
+// state prediction (latency compensation).
 
 #ifndef UAV_MPC__QUADROTOR_DYNAMICS_HPP_
 #define UAV_MPC__QUADROTOR_DYNAMICS_HPP_
@@ -43,11 +42,9 @@ struct QuadrotorParams
 
   /// Load from a flat ROS parameter map or a YAML node. Throws std::runtime_error if a key
   /// is missing or a value is non-physical (mass <= 0, non-SPD inertia, ...).
-  // TODO(deepseek): implement in quadrotor_dynamics.cpp
   static QuadrotorParams fromYaml(const std::string & yaml_path);
 
   /// True iff every field is physically admissible. Cheap; called on every reconfigure.
-  // TODO(deepseek): implement in quadrotor_dynamics.cpp
   bool isValid(std::string * why = nullptr) const;
 };
 
@@ -103,39 +100,32 @@ public:
   explicit QuadrotorDynamics(const QuadrotorParams & params);
 
   /// Continuous-time state derivative x_dot = f(x, u). No allocation, no exceptions.
-  // TODO(deepseek): implement
   StateVector f(const StateVector & x, const InputVector & u) const;
 
   /// Explicit RK4 discretisation over dt. Re-normalises the quaternion on exit when
   /// Rep == Quaternion. Used for latency compensation and for the SIL "truth" integrator.
-  // TODO(deepseek): implement
   StateVector step(const StateVector & x, const InputVector & u, Scalar dt) const;
 
   /// Analytic Jacobians of f. Only needed for the C++-side EKF-free sanity tests; acados gets
   /// its own derivatives from CasADi AD. Implement by hand and unit-test against finite
   /// differences (tolerance 1e-6 relative).
-  // TODO(deepseek): implement
   void jacobians(
     const StateVector & x, const InputVector & u, StateJacobian * A, InputJacobian * B) const;
 
   /// Control allocation: individual rotor thrusts -> (collective thrust [N], body torque [N m]).
   /// Layout is the PX4 "quad X" convention; see the mixer table in the guide (§4.3).
-  // TODO(deepseek): implement
   void allocate(const InputVector & u, Scalar * collective_thrust, Eigen::Matrix<Scalar, 3, 1> * torque)
   const;
 
   /// Inverse allocation, clamped to [min_thrust_per_rotor, max_thrust_per_rotor].
   /// Returns false if the request was infeasible and had to be clamped.
-  // TODO(deepseek): implement
   bool allocateInverse(
     Scalar collective_thrust, const Eigen::Matrix<Scalar, 3, 1> & torque, InputVector * u) const;
 
   /// Hover thrust per rotor, m*g/4. Used to seed the solver and to normalise PX4 thrust.
-  // TODO(deepseek): implement
   Scalar hoverThrustPerRotor() const;
 
   /// Rotation body->world for the attitude slice of x.
-  // TODO(deepseek): implement
   Eigen::Matrix<Scalar, 3, 3> rotationMatrix(const StateVector & x) const;
 
   const QuadrotorParams & params() const {return params_;}
@@ -143,9 +133,10 @@ public:
 private:
   QuadrotorParams params_;
   Eigen::Matrix<Scalar, 4, 4> allocation_;      ///< [T; tau_x; tau_y; tau_z] = allocation_ * u
+  Eigen::Matrix<Scalar, 4, 4> allocation_inverse_;  ///< cached inverse of allocation_ (see §4.3)
   Eigen::Matrix<Scalar, 3, 3> inertia_inv_;
 
-  // TODO(deepseek): implement — builds allocation_ and inertia_inv_ from params_.
+  /// Builds allocation_ (PX4 quad-X, §4.3) and inertia_inv_ from params_.
   void buildAllocationMatrix();
 };
 
@@ -154,40 +145,42 @@ private:
 // ---------------------------------------------------------------------------------------------
 
 /// Hamilton quaternion product, (w, x, y, z) ordering.
-// TODO(deepseek): implement
 template<typename Scalar>
 Eigen::Quaternion<Scalar> quatMultiply(
   const Eigen::Quaternion<Scalar> & a, const Eigen::Quaternion<Scalar> & b);
 
 /// Shortest-arc error quaternion q_err = q_ref^-1 (x) q, with the sign convention that the
 /// scalar part is non-negative (avoids the unwinding phenomenon).
-// TODO(deepseek): implement
 template<typename Scalar>
 Eigen::Quaternion<Scalar> quatError(
   const Eigen::Quaternion<Scalar> & q, const Eigen::Quaternion<Scalar> & q_ref);
 
 /// ZYX Euler (roll, pitch, yaw) <-> quaternion, matching the StateLayout ordering.
-// TODO(deepseek): implement
 template<typename Scalar>
 Eigen::Matrix<Scalar, 3, 1> quatToEulerZyx(const Eigen::Quaternion<Scalar> & q);
 
-// TODO(deepseek): implement
 template<typename Scalar>
 Eigen::Quaternion<Scalar> eulerZyxToQuat(const Eigen::Matrix<Scalar, 3, 1> & rpy);
 
 /// ENU(world)/FLU(body) <-> NED(world)/FRD(body) frame conversions for the PX4 boundary.
-// TODO(deepseek): implement
 Eigen::Vector3d enuToNed(const Eigen::Vector3d & v_enu);
-// TODO(deepseek): implement
 Eigen::Vector3d nedToEnu(const Eigen::Vector3d & v_ned);
-// TODO(deepseek): implement
 Eigen::Quaterniond quatEnuFluToNedFrd(const Eigen::Quaterniond & q_enu_flu);
-// TODO(deepseek): implement
 Eigen::Quaterniond quatNedFrdToEnuFlu(const Eigen::Quaterniond & q_ned_frd);
 
 // Explicit instantiations provided in quadrotor_dynamics.cpp:
 extern template class QuadrotorDynamics<double, AttitudeRep::Quaternion>;
 extern template class QuadrotorDynamics<double, AttitudeRep::Euler>;
+
+// The free helper templates are also explicitly instantiated for double in
+// quadrotor_dynamics.cpp so other translation units (e.g. trajectory_generator.cpp) can use
+// them without dragging the template definitions into every TU.
+extern template Eigen::Quaterniond quatMultiply<double>(
+  const Eigen::Quaterniond &, const Eigen::Quaterniond &);
+extern template Eigen::Quaterniond quatError<double>(
+  const Eigen::Quaterniond &, const Eigen::Quaterniond &);
+extern template Eigen::Vector3d quatToEulerZyx<double>(const Eigen::Quaterniond &);
+extern template Eigen::Quaterniond eulerZyxToQuat<double>(const Eigen::Vector3d &);
 
 }  // namespace uav_mpc
 

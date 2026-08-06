@@ -28,7 +28,9 @@
       segment_times: []
 
       # --- aggressive preset, for the README GIF -------------------------------------------
-      # Uncomment to reproduce media/figure8.gif (peaks ~6 m/s, ~15 m/s^2, ~35 deg bank):
+      # Uncomment to reproduce media/figure8.gif. Derived peaks (computed in
+      # docs/derivations/differential_flatness.tex §6): ~5.3 m/s, ~10.1 m/s^2,
+      # ~46 deg bank, 7.0 N peak per-rotor thrust (limit 8.55 N):
       # amplitude_x: 3.0
       # amplitude_y: 3.0
       # period: 5.0
