@@ -1,5 +1,6 @@
-# SKELETON — the keys and units are final; the weight VALUES are placeholders that must be
-# re-tuned once the solver runs. See docs/TUNING_GUIDE.md and .deepseek/09_CONFIG.md §9.1.
+# Controller configuration. The keys and units are final; the weight VALUES are still
+# UNVERIFIED placeholders that must be re-tuned once the solver runs against real dynamics.
+# See docs/TUNING_GUIDE.md and .deepseek/09_CONFIG.md §9.1.
 #
 # Every key here is declared as a ROS parameter by NmpcNode::declareParameters(). Keys marked
 # [read-only] are baked into the generated solver and cannot be changed without re-running
@@ -7,6 +8,21 @@
 
 /**:
   ros__parameters:
+
+    # ---------------------------------------------------------------------------------------
+    # Vehicle backend  [read-only — constructed in on_configure]
+    #
+    #   generic  standard ROS 2 messages, NO px4_msgs required. This is the default and the
+    #            only backend available on ROS 2 Lyrical Luth today.
+    #              IN  ~/odometry           nav_msgs/msg/Odometry   (world ENU, body twist)
+    #              OUT ~/attitude_setpoint  uav_mpc/msg/AttitudeThrustSetpoint  (ENU/FLU)
+    #            There is no arm/offboard handshake: the controller assumes it always has
+    #            authority, and whatever consumes ~/attitude_setpoint owns the interlocks.
+    #
+    #   px4      px4_msgs over uXRCE-DDS. Available ONLY if px4_msgs was found at build time;
+    #            requesting it otherwise fails on_configure with instructions.
+    # ---------------------------------------------------------------------------------------
+    vehicle_interface: "generic"
 
     # ---------------------------------------------------------------------------------------
     # Loop timing

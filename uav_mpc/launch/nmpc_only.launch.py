@@ -3,7 +3,8 @@
 Assumes PX4 (SITL or hardware) and the uXRCE-DDS agent are already running. This is the
 building block every other launch file includes.
 
-    ros2 launch uav_mpc nmpc_only.launch.py airframe:=x500 auto_arm:=false
+    ros2 launch uav_mpc nmpc_only.launch.py airframe:=x500 vehicle_interface:=generic
+    ros2 launch uav_mpc nmpc_only.launch.py vehicle_interface:=px4 auto_arm:=false
 
 Lifecycle sequencing uses EVENTS (OnProcessStart -> CONFIGURE, OnStateTransition
 inactive -> ACTIVATE), never TimerAction races — a timer that "usually works" is a race.
@@ -53,6 +54,10 @@ def generate_launch_description() -> LaunchDescription:
             "namespace", default_value="",
             description="namespace for the node's OWN topics (PX4 /fmu/* topics stay absolute)"),
         DeclareLaunchArgument(
+            "vehicle_interface", default_value="generic",
+            description="autopilot backend: 'generic' (standard ROS 2 messages, no px4_msgs "
+                        "needed — the default) or 'px4' (requires a build with px4_msgs)"),
+        DeclareLaunchArgument(
             "auto_arm", default_value="false",
             description="arm via VehicleCommand once offboard is active (SITL/CI only)"),
         DeclareLaunchArgument(
@@ -74,6 +79,7 @@ def generate_launch_description() -> LaunchDescription:
     nmpc_config = LaunchConfiguration("nmpc_config")
     trajectory_config = LaunchConfiguration("trajectory_config")
     namespace = LaunchConfiguration("namespace")
+    vehicle_interface = LaunchConfiguration("vehicle_interface")
     auto_arm = LaunchConfiguration("auto_arm")
     auto_activate = LaunchConfiguration("auto_activate")
     log_level = LaunchConfiguration("log_level")
@@ -92,6 +98,7 @@ def generate_launch_description() -> LaunchDescription:
             {
                 "airframe_params_path": PathJoinSubstitution(
                     [share_dir, "params", [airframe, "_calibration.yaml"]]),
+                "vehicle_interface": vehicle_interface,
                 "auto_arm": ParameterValue(auto_arm, value_type=ParameterType.PARAMETER_BOOL),
                 "use_sim_time": ParameterValue(
                     use_sim_time, value_type=ParameterType.PARAMETER_BOOL),

@@ -33,16 +33,34 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
-# px4_msgs is OPTIONAL: the node needs it, the core library + tests do not. Builds without
-# px4_msgs produce the core library and tests only; to enable the node targets, install it:
+# px4_msgs is an OPTIONAL EXTRA, never a dependency. It is not released for ROS 2 Lyrical Luth,
+# so the whole package — node included — builds and runs without it using the generic vehicle
+# backend (standard ROS 2 messages). When px4_msgs IS present, the PX4 backend is compiled in
+# additionally and can be selected at runtime with `vehicle_interface:=px4`.
+#
+# To enable the PX4 backend:
 #   git clone https://github.com/PX4/px4_msgs.git <ros2_ws>/src/px4_msgs
-#   cd <ros2_ws> && colcon build --packages-select px4_msgs
-find_package(px4_msgs QUIET)
-if(px4_msgs_FOUND)
-  message(STATUS "px4_msgs found — building the nmpc_node component + executable")
+#   cd <ros2_ws> && colcon build
+# CMake picks it up automatically on the next configure. Force it off with
+# -DUAV_MPC_WITH_PX4_MSGS=OFF even when the package is installed.
+option(UAV_MPC_WITH_PX4_MSGS
+  "Compile the PX4 (px4_msgs/uXRCE-DDS) vehicle backend when px4_msgs is available." ON)
+
+set(UAV_MPC_PX4_BACKEND OFF)
+if(UAV_MPC_WITH_PX4_MSGS)
+  find_package(px4_msgs QUIET)
+  if(px4_msgs_FOUND)
+    set(UAV_MPC_PX4_BACKEND ON)
+    message(STATUS
+      "px4_msgs found — compiling the PX4 vehicle backend (select with vehicle_interface:=px4)")
+  else()
+    message(STATUS
+      "px4_msgs NOT found — building with the generic vehicle backend only. This is expected "
+      "on Lyrical Luth; the node still builds and runs. Install px4_msgs to enable "
+      "vehicle_interface:=px4.")
+  endif()
 else()
-  message(STATUS "px4_msgs NOT found — SKIPPING the nmpc_node component + executable "
-                  "(install px4_msgs to enable; core library and tests still build)")
+  message(STATUS "UAV_MPC_WITH_PX4_MSGS=OFF — PX4 backend deliberately excluded")
 endif()
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -110,6 +128,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SolverDiagnostics.msg"
   "msg/TrajectorySpec.msg"
   "msg/NmpcStatus.msg"
+  "msg/AttitudeThrustSetpoint.msg"
   "srv/SetTrajectory.srv"
   "action/FollowTrajectory.action"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
@@ -148,30 +167,36 @@ target_compile_definitions(${PROJECT_NAME}_core PRIVATE
 )
 
 # ------------------------------------------------------------------------------------------------
-# Node (component + executable) — requires px4_msgs (find_package(px4_msgs QUIET) above)
+# Node (component + executable) — ALWAYS built. px4_msgs is not required.
 # ------------------------------------------------------------------------------------------------
-if(px4_msgs_FOUND)
-  add_library(nmpc_component SHARED src/nmpc_node.cpp)
-  target_link_libraries(nmpc_component ${PROJECT_NAME}_core)
-  ament_target_dependencies(nmpc_component
-    rclcpp rclcpp_lifecycle rclcpp_components lifecycle_msgs
-    std_msgs geometry_msgs nav_msgs px4_msgs tf2 tf2_ros tf2_eigen Eigen3
-  )
-  rclcpp_components_register_node(nmpc_component
-    PLUGIN "uav_mpc::NmpcNode"
-    EXECUTABLE nmpc_node_component
-  )
-  # Link the node against this package's own generated interfaces.
-  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
-  target_link_libraries(nmpc_component "${cpp_typesupport_target}")
-
-  add_executable(nmpc_node src/main.cpp)
-  target_link_libraries(nmpc_node nmpc_component ${PROJECT_NAME}_core)
-  ament_target_dependencies(nmpc_node rclcpp rclcpp_lifecycle)
-else()
-  # Keep the typesupport target name from dangling when the node is skipped.
-  set(cpp_typesupport_target "")
+# vehicle_interface.cpp holds the generic backend + the factory and always compiles.
+# vehicle_interface_px4.cpp is guarded by UAV_MPC_WITH_PX4_MSGS internally, so it is safe to
+# list unconditionally — without the define it compiles to an empty translation unit.
+add_library(nmpc_component SHARED
+  src/nmpc_node.cpp
+  src/vehicle_interface.cpp
+  src/vehicle_interface_px4.cpp
+)
+target_link_libraries(nmpc_component ${PROJECT_NAME}_core)
+ament_target_dependencies(nmpc_component
+  rclcpp rclcpp_lifecycle rclcpp_components lifecycle_msgs
+  std_msgs geometry_msgs nav_msgs tf2 tf2_ros tf2_eigen Eigen3
+)
+if(UAV_MPC_PX4_BACKEND)
+  target_compile_definitions(nmpc_component PRIVATE UAV_MPC_WITH_PX4_MSGS)
+  ament_target_dependencies(nmpc_component px4_msgs)
 endif()
+rclcpp_components_register_node(nmpc_component
+  PLUGIN "uav_mpc::NmpcNode"
+  EXECUTABLE nmpc_node_component
+)
+# Link the node against this package's own generated interfaces.
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
+target_link_libraries(nmpc_component "${cpp_typesupport_target}")
+
+add_executable(nmpc_node src/main.cpp)
+target_link_libraries(nmpc_node nmpc_component ${PROJECT_NAME}_core)
+ament_target_dependencies(nmpc_node rclcpp rclcpp_lifecycle)
 
 # ------------------------------------------------------------------------------------------------
 # Install
@@ -181,14 +206,12 @@ install(TARGETS ${PROJECT_NAME}_core
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
-if(px4_msgs_FOUND)
-  install(TARGETS nmpc_component
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-  )
-  install(TARGETS nmpc_node DESTINATION lib/${PROJECT_NAME})
-endif()
+install(TARGETS nmpc_component
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+install(TARGETS nmpc_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch config params rviz DESTINATION share/${PROJECT_NAME})
 
@@ -239,12 +262,9 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_include_directories(include)
-ament_export_libraries(${PROJECT_NAME}_core)
-if(px4_msgs_FOUND)
-  ament_export_libraries(nmpc_component)
-endif()
-ament_export_dependencies(rclcpp rclcpp_lifecycle Eigen3 rosidl_default_runtime)
-if(px4_msgs_FOUND)
-  ament_export_dependencies(px4_msgs)
-endif()
+ament_export_libraries(${PROJECT_NAME}_core nmpc_component)
+ament_export_dependencies(
+  rclcpp rclcpp_lifecycle geometry_msgs nav_msgs Eigen3 rosidl_default_runtime)
+# px4_msgs is deliberately NOT exported even when present: it is an internal implementation
+# detail of one backend, and exporting it would push the dependency onto every consumer.
 ament_package()

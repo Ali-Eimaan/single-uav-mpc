@@ -23,6 +23,16 @@ Validate: `control_rate_hz > 0`; `state_timeout_s >= 2/control_rate_hz`;
 The weight vectors are **12 entries, not 13** — they weight the cost residual, in which the
 attitude appears as a 3-vector error. See [06_SOLVER.md §6.3](06_SOLVER.md).
 
+## 9.1.1 `vehicle_interface`
+
+Read-only, default `"generic"`. Selects the autopilot backend (§7.10). It is read-only because
+the backend is constructed in `on_configure`; changing it requires a
+deactivate -> cleanup -> configure cycle, and `onParameterUpdate` rejects a live change with
+that reason.
+
+`px4_hover_thrust` is used by both backends (it is the thrust calibration, not a PX4 field), but
+the requirement that it match `MPC_THR_HOVER` applies only when running `vehicle_interface:=px4`.
+
 ## 9.2 Airframe calibration files
 
 `params/x500_calibration.yaml` and `params/crazyflie21_calibration.yaml` carry `verified: false`.

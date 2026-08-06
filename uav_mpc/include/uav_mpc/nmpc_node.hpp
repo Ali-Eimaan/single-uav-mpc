@@ -1,24 +1,25 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// ROS 2 lifecycle node running the NMPC at 100 Hz against PX4 over uXRCE-DDS.
+// ROS 2 lifecycle node running the NMPC at 100 Hz.
 // See .deepseek/07_NODE.md §7.
 //
-// [px4_msgs] This header and nmpc_node.cpp depend on the px4_msgs package
-// (https://github.com/PX4/px4_msgs), which is NOT installed in this environment.
-// The node targets in CMakeLists.txt are gated on px4_msgs_FOUND, so the core library
-// and tests build without it. To build the node, first install px4_msgs:
-//   git clone https://github.com/PX4/px4_msgs.git <ros2_ws>/src/px4_msgs
-//   cd <ros2_ws> && colcon build --packages-select px4_msgs
-// Every place that needs px4_msgs is marked with a `[px4_msgs]` comment.
+// This node contains NO autopilot-specific types. All vehicle I/O goes through
+// VehicleInterface (see vehicle_interface.hpp), selected at runtime by the `vehicle_interface`
+// parameter:
 //
-//   IN : /fmu/out/vehicle_local_position      (px4_msgs::msg::VehicleLocalPosition, NED)
-//        /fmu/out/vehicle_attitude            (px4_msgs::msg::VehicleAttitude, NED/FRD)
-//        /fmu/out/vehicle_angular_velocity    (px4_msgs::msg::VehicleAngularVelocity, FRD)
-//        /fmu/out/vehicle_status              (px4_msgs::msg::VehicleStatus)
-//   OUT: /fmu/in/offboard_control_mode        (px4_msgs::msg::OffboardControlMode)  @ 100 Hz
-//        /fmu/in/vehicle_attitude_setpoint    (px4_msgs::msg::VehicleAttitudeSetpoint)
-//        /fmu/in/vehicle_command              (px4_msgs::msg::VehicleCommand)  arm / mode switch
+//   "generic" (default) — standard ROS 2 messages only, no px4_msgs required:
+//        IN  ~/odometry            nav_msgs/msg/Odometry            (world ENU, body twist)
+//        OUT ~/attitude_setpoint   uav_mpc/msg/AttitudeThrustSetpoint (ENU/FLU)
+//
+//   "px4" — px4_msgs over uXRCE-DDS. Available only when px4_msgs was found at build time
+//        (it is not released for ROS 2 Lyrical Luth yet). Requesting it from a build without
+//        it fails on_configure with an actionable message.
+//        IN  /fmu/out/vehicle_local_position, vehicle_attitude, vehicle_angular_velocity,
+//            vehicle_status
+//        OUT /fmu/in/offboard_control_mode, vehicle_attitude_setpoint, vehicle_command
+//
+// Backend-independent outputs, always published:
 //        ~/status                             (uav_mpc::msg::NmpcStatus)
 //        ~/predicted_path                     (nav_msgs::msg::Path, ENU, for RViz)
 //        ~/reference_path                     (nav_msgs::msg::Path, ENU, for RViz)
@@ -35,18 +36,15 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 #include "nav_msgs/msg/path.hpp"
-#include "px4_msgs/msg/offboard_control_mode.hpp"
-#include "px4_msgs/msg/vehicle_angular_velocity.hpp"
-#include "px4_msgs/msg/vehicle_attitude.hpp"
-#include "px4_msgs/msg/vehicle_attitude_setpoint.hpp"
-#include "px4_msgs/msg/vehicle_command.hpp"
-#include "px4_msgs/msg/vehicle_local_position.hpp"
-#include "px4_msgs/msg/vehicle_status.hpp"
 
 #include "uav_mpc/acados_wrapper.hpp"
 #include "uav_mpc/quadrotor_dynamics.hpp"
 #include "uav_mpc/trajectory_generator.hpp"
+#include "uav_mpc/vehicle_interface.hpp"
 #include "uav_mpc/msg/nmpc_status.hpp"
 #include "uav_mpc/srv/set_trajectory.hpp"
 
@@ -96,15 +94,12 @@ private:
   rcl_interfaces::msg::SetParametersResult onParameterUpdate(
     const std::vector<rclcpp::Parameter> & params);
 
-  // --- subscriptions -------------------------------------------------------------------------
-  /// Caches NED position/velocity, converts to ENU, stamps arrival time. Rejects invalid flags.
-  void onLocalPosition(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg);
-  /// Caches attitude; converts NED/FRD -> ENU/FLU (msg->q is w,x,y,z NED/FRD).
-  void onAttitude(const px4_msgs::msg::VehicleAttitude::SharedPtr msg);
-  /// Caches body rates; FRD -> FLU is (x, -y, -z).
-  void onAngularVelocity(const px4_msgs::msg::VehicleAngularVelocity::SharedPtr msg);
-  /// Tracks arming state + nav state, detects loss of offboard.
-  void onVehicleStatus(const px4_msgs::msg::VehicleStatus::SharedPtr msg);
+  // --- vehicle interface callbacks -------------------------------------------------------------
+  /// Caches whichever fields the sample carries (already ENU/FLU) and stamps arrival time.
+  /// Backends deliver full samples (generic) or partial ones (PX4's three separate topics).
+  void onOdometry(const VehicleOdometry & odom);
+  /// Tracks arming + control authority; detects loss of offboard while tracking.
+  void onVehicleStatus(const VehicleStatusFlags & flags);
 
   // --- services ------------------------------------------------------------------------------
   /// Swaps the active trajectory at runtime; rejects unless in Tracking/Streaming and the new
@@ -131,24 +126,19 @@ private:
   /// so the OCP starts from where the vehicle will be when the command lands.
   Eigen::VectorXd compensateLatency(const Eigen::VectorXd & x0, double latency_s) const;
 
-  /// u0 [per-rotor thrust, N] -> PX4 VehicleAttitudeSetpoint (q_d in NED/FRD, normalised
-  /// thrust_body[2] in [-1, 0]). Uses the desired body z-axis implied by the predicted
-  /// acceleration at stage 1, per §7.6.
-  px4_msgs::msg::VehicleAttitudeSetpoint toAttitudeSetpoint(
-    const Eigen::VectorXd & u0, const Eigen::VectorXd & x_pred_1) const;
+  /// u0 [per-rotor thrust, N] -> frame-neutral attitude+thrust command (ENU/FLU). The attitude
+  /// is the optimiser's intent at stage 1, which already accounts for the rate dynamics (§7.6).
+  /// Caches `last_q_d_enu_` for telemetry, so this is deliberately non-const.
+  AttitudeThrustCommand buildCommand(
+    const Eigen::VectorXd & u0, const Eigen::VectorXd & x_pred_1);
 
-  /// Normalised thrust for PX4 from collective thrust [N], using the hover-thrust calibration
-  /// (`px4_hover_thrust_` from config/px4_overrides.yaml) and a linear/quadratic mapping.
+  /// Normalised thrust from collective thrust [N], using the hover-thrust calibration
+  /// (`px4_hover_thrust_`) and a linear mapping. Backend-independent.
   double normaliseThrust(double collective_thrust_newton) const;
 
-  // --- PX4 handshake -------------------------------------------------------------------------
-  /// Must be published at >= 2 Hz *before* and during offboard (every control tick).
-  void publishOffboardControlMode();
-  /// VEHICLE_CMD_DO_SET_MODE (176) to offboard: param1 = 1, param2 = 6.
-  void requestOffboardMode();
-  /// VEHICLE_CMD_COMPONENT_ARM_DISARM (400), param1 = 1. Gated on `auto_arm_` param.
+  /// Arming / offboard requests, delegated to the active backend. No-ops on backends without
+  /// an autopilot handshake. `requestArm` is additionally gated on the `auto_arm_` parameter.
   void requestArm();
-  /// param1 = 0. Only from Landing with |z| < 0.15 m and |v| < 0.2 m/s.
   void requestDisarm();
 
   // --- state machine -------------------------------------------------------------------------
@@ -167,17 +157,10 @@ private:
   void fillTakeoffLandingHorizon(
     ControllerState state, const Eigen::VectorXd & x0, double dt, int n, double hover_thrust_n);
 
-  // --- publishers / subscribers ---------------------------------------------------------------
-  rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr sub_local_position_;
-  rclcpp::Subscription<px4_msgs::msg::VehicleAttitude>::SharedPtr sub_attitude_;
-  rclcpp::Subscription<px4_msgs::msg::VehicleAngularVelocity>::SharedPtr sub_angular_velocity_;
-  rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr sub_vehicle_status_;
+  // --- vehicle backend (owns all autopilot-specific pubs/subs) ----------------------------------
+  std::unique_ptr<VehicleInterface> vehicle_;
 
-  rclcpp_lifecycle::LifecyclePublisher<px4_msgs::msg::VehicleAttitudeSetpoint>::SharedPtr
-    pub_attitude_setpoint_;
-  rclcpp_lifecycle::LifecyclePublisher<px4_msgs::msg::OffboardControlMode>::SharedPtr
-    pub_offboard_mode_;
-  rclcpp_lifecycle::LifecyclePublisher<px4_msgs::msg::VehicleCommand>::SharedPtr pub_command_;
+  // --- backend-independent publishers -----------------------------------------------------------
   rclcpp_lifecycle::LifecyclePublisher<uav_mpc::msg::NmpcStatus>::SharedPtr pub_status_;
   rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr pub_predicted_path_;
   rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr pub_reference_path_;
@@ -238,6 +221,9 @@ private:
   bool auto_arm_{false};
   bool publish_visualisation_{true};
   std::string airframe_params_path_{};
+  /// "generic" (default, no px4_msgs needed) or "px4". Read-only: the backend is built in
+  /// on_configure, so switching it requires a deactivate/cleanup/configure cycle.
+  std::string vehicle_interface_kind_{"generic"};
 
   // --- per-tick telemetry cache -----------------------------------------------------------------
   double loop_period_ms_{0.0};

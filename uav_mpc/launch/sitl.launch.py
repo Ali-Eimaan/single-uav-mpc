@@ -123,6 +123,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("trajectory", default_value="hover",
                               description="boot trajectory type, passed to the NMPC node"),
         DeclareLaunchArgument("airframe", default_value="x500"),
+        DeclareLaunchArgument(
+            "vehicle_interface", default_value="px4",
+            description="backend for the NMPC node. SITL is PX4, so this defaults to 'px4', "
+                        "which requires a workspace containing px4_msgs."),
     ]
 
     model = LaunchConfiguration("model")
@@ -131,6 +135,7 @@ def generate_launch_description() -> LaunchDescription:
     agent_port = LaunchConfiguration("agent_port")
     rviz_enabled = LaunchConfiguration("rviz")
     auto_arm = LaunchConfiguration("auto_arm")
+    vehicle_interface = LaunchConfiguration("vehicle_interface")
     trajectory = LaunchConfiguration("trajectory")
     airframe = LaunchConfiguration("airframe")
     px4_dir = LaunchConfiguration("px4_dir")
@@ -178,6 +183,11 @@ def generate_launch_description() -> LaunchDescription:
             "auto_arm": auto_arm,
             "trajectory": trajectory,
             "use_sim_time": "true",
+            # SITL IS PX4, so this stack needs the px4 backend. It is only available when the
+            # workspace contains px4_msgs — on Lyrical Luth it does not, and the node will fail
+            # on_configure with instructions. That failure is deliberate and honest: a PX4 SITL
+            # run genuinely cannot work through the generic backend without an adapter.
+            "vehicle_interface": vehicle_interface,
         },
     )
     nmpc_delayed = TimerAction(period=5.0, actions=[nmpc_only])

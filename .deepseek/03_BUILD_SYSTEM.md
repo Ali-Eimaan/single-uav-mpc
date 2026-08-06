@@ -61,6 +61,17 @@ Interface generation order matters: `rosidl_generate_interfaces` must list
 `SolverDiagnostics.msg` and `TrajectorySpec.msg` before the files that depend on them.
 Link the node against its own generated types via `rosidl_get_typesupport_target`.
 
+## 3.4.1 px4_msgs is optional, never required
+
+`find_package(px4_msgs QUIET)` gates only the `UAV_MPC_WITH_PX4_MSGS` compile definition on
+`nmpc_component`. The node target is built **unconditionally** — a build without px4_msgs is a
+fully working controller using the generic backend, not a degraded one.
+
+`src/vehicle_interface_px4.cpp` is listed unconditionally in the target sources; it wraps its
+whole body in `#ifdef UAV_MPC_WITH_PX4_MSGS`, so without the define it compiles to an empty
+translation unit. Do not move it into a conditional `if()` block — the unconditional listing is
+what keeps the file compiling (and lint-clean) on every build.
+
 ## 3.5 `package.xml`
 
 `<license>BSD-3-Clause</license>`, format 3, `<member_of_group>rosidl_interface_packages</member_of_group>`.

@@ -1,18 +1,14 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// ROS 2 lifecycle node running the NMPC at 100 Hz against PX4 over uXRCE-DDS.
-// See .deepseek/07_NODE.md §7.
+// ROS 2 lifecycle node running the NMPC at 100 Hz. See .deepseek/07_NODE.md §7.
 //
-// [px4_msgs] This file depends on px4_msgs (https://github.com/PX4/px4_msgs), which is NOT
-// installed in this environment — the node targets in CMakeLists.txt are gated on
-// px4_msgs_FOUND, so the core library and tests build without it. To build the node, install
-// px4_msgs first (see the comment in CMakeLists.txt), then re-run colcon. Every place below
-// that needs px4_msgs is marked with a `[px4_msgs]` comment.
+// This file contains NO autopilot-specific types. Vehicle I/O is delegated to a
+// VehicleInterface backend chosen at runtime by the `vehicle_interface` parameter — "generic"
+// (standard ROS 2 messages, the default) or "px4" (px4_msgs, built only when that package is
+// present). See vehicle_interface.hpp for why.
 //
-// VERIFICATION STATUS: syntax-verified against the .deepseek spec, NOT compile-verified —
-// px4_msgs is absent and no build has been run. Treat every px4_msgs field name/constant as
-// UNVERIFIED until the node compiles against the pinned px4_msgs release.
+// VERIFICATION STATUS: NOT compile-verified — no ROS 2 build has been run in this environment.
 
 #include "uav_mpc/nmpc_node.hpp"
 
@@ -35,26 +31,12 @@ namespace uav_mpc
 namespace
 {
 
-constexpr int kOffboardPreStreamCount = 20;  ///< PX4 wants setpoints BEFORE it accepts offboard
 constexpr double kMinAltitudeM = 0.3;        ///< SetTrajectory validation bounds
 constexpr double kMaxAltitudeM = 10.0;
 constexpr double kLandingZThresholdM = 0.15;
 constexpr double kLandingVThresholdMps = 0.2;
+constexpr double kTakeoffVThresholdMps = 0.2;
 constexpr double kTakeoffZWindowM = 0.1;
-
-/// PX4 QoS: BestEffort + Volatile, KeepLast(5). A mismatched profile silently receives nothing.
-rclcpp::QoS px4Qos()
-{
-  rclcpp::QoS qos(rclcpp::KeepLast(5));
-  qos.best_effort().durability_volatile();
-  return qos;
-}
-
-/// Timestamps to PX4 are microseconds — nanoseconds makes PX4 silently drop the setpoint (§7.5).
-std::uint64_t nowUs(const rclcpp::Clock & clock)
-{
-  return static_cast<std::uint64_t>(clock.now().nanoseconds() / 1000);
-}
 
 Eigen::Vector3d toEigen(const geometry_msgs::msg::Point & p)
 {
@@ -163,32 +145,23 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   p(4) = 1.0;   // q_ref.w
   solver_->setParameters(p);
 
-  // --- subscriptions [px4_msgs] --------------------------------------------------------------
-  // BestEffort + Volatile QoS is mandatory for every /fmu/* topic (§7.2).
-  sub_local_position_ = create_subscription<px4_msgs::msg::VehicleLocalPosition>(
-    "/fmu/out/vehicle_local_position", px4Qos(),
-    std::bind(&NmpcNode::onLocalPosition, this, std::placeholders::_1),
-    telemetry_callback_group_);
-  sub_attitude_ = create_subscription<px4_msgs::msg::VehicleAttitude>(
-    "/fmu/out/vehicle_attitude", px4Qos(),
-    std::bind(&NmpcNode::onAttitude, this, std::placeholders::_1),
-    telemetry_callback_group_);
-  sub_angular_velocity_ = create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
-    "/fmu/out/vehicle_angular_velocity", px4Qos(),
-    std::bind(&NmpcNode::onAngularVelocity, this, std::placeholders::_1),
-    telemetry_callback_group_);
-  sub_vehicle_status_ = create_subscription<px4_msgs::msg::VehicleStatus>(
-    "/fmu/out/vehicle_status", px4Qos(),
-    std::bind(&NmpcNode::onVehicleStatus, this, std::placeholders::_1),
-    telemetry_callback_group_);
+  // --- vehicle backend -------------------------------------------------------------------------
+  // All autopilot-specific topics/QoS live inside the backend. Selecting "px4" on a build
+  // without px4_msgs fails here with an actionable message rather than degrading silently.
+  vehicle_ = makeVehicleInterface(vehicle_interface_kind_, &error);
+  if (!vehicle_) {
+    RCLCPP_ERROR(get_logger(), "on_configure: %s", error.c_str());
+    return CallbackReturn::FAILURE;
+  }
+  vehicle_->setOdometryCallback([this](const VehicleOdometry & o) {this->onOdometry(o);});
+  vehicle_->setStatusCallback([this](const VehicleStatusFlags & f) {this->onVehicleStatus(f);});
+  if (!vehicle_->setup(this, telemetry_callback_group_, &error)) {
+    RCLCPP_ERROR(get_logger(), "on_configure: vehicle interface setup failed: %s",
+      error.c_str());
+    return CallbackReturn::FAILURE;
+  }
 
   // --- publishers (created inactive; activated on on_activate) --------------------------------
-  pub_attitude_setpoint_ = create_publisher<px4_msgs::msg::VehicleAttitudeSetpoint>(
-    "/fmu/in/vehicle_attitude_setpoint", px4Qos());
-  pub_offboard_mode_ = create_publisher<px4_msgs::msg::OffboardControlMode>(
-    "/fmu/in/offboard_control_mode", px4Qos());
-  pub_command_ = create_publisher<px4_msgs::msg::VehicleCommand>(
-    "/fmu/in/vehicle_command", px4Qos());
   pub_status_ = create_publisher<uav_mpc::msg::NmpcStatus>("~/status", rclcpp::QoS(10));
   pub_predicted_path_ = create_publisher<nav_msgs::msg::Path>(
     "~/predicted_path", rclcpp::QoS(10));
@@ -205,9 +178,16 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   param_callback_handle_ = this->add_on_set_parameters_callback(
     std::bind(&NmpcNode::onParameterUpdate, this, std::placeholders::_1));
 
-  RCLCPP_INFO(get_logger(), "configured: airframe=%s N=%d Tf=%.2f nx=%d nu=%d np=%d hover=%.4f N",
-    airframe_.frame_name.c_str(), solver_config_.horizon_steps, solver_config_.horizon_time,
-    solver_->nx(), solver_->nu(), solver_->np(), hover_thrust_n_);
+  RCLCPP_INFO(get_logger(),
+    "configured: backend=%s airframe=%s N=%d Tf=%.2f nx=%d nu=%d np=%d hover=%.4f N",
+    vehicle_->name().c_str(), airframe_.frame_name.c_str(), solver_config_.horizon_steps,
+    solver_config_.horizon_time, solver_->nx(), solver_->nu(), solver_->np(), hover_thrust_n_);
+  if (!vehicle_->hasAutopilotHandshake()) {
+    RCLCPP_WARN(get_logger(),
+      "backend '%s' has no arm/offboard handshake: the controller assumes it always has "
+      "authority. Whatever consumes ~/attitude_setpoint owns the safety interlocks.",
+      vehicle_->name().c_str());
+  }
   return CallbackReturn::SUCCESS;
 }
 
@@ -215,6 +195,7 @@ CallbackReturn NmpcNode::on_activate(const rclcpp_lifecycle::State & state)
 {
   // The base implementation activates the node's lifecycle publishers.
   rclcpp_lifecycle::LifecycleNode::on_activate(state);
+  if (vehicle_) {vehicle_->activate();}
 
   const auto period = std::chrono::duration<double>(1.0 / control_rate_hz_);
   control_timer_ = create_wall_timer(
@@ -226,7 +207,6 @@ CallbackReturn NmpcNode::on_activate(const rclcpp_lifecycle::State & state)
   armed_.store(false);
   offboard_active_.store(false);
   landing_requested_.store(false);
-  offboard_stream_counter_ = 0;
   consecutive_solver_failures_ = 0;
   last_tick_time_ = this->now();
   trajectory_start_time_ = this->now();
@@ -243,9 +223,11 @@ CallbackReturn NmpcNode::on_deactivate(const rclcpp_lifecycle::State & state)
     control_timer_->cancel();
     control_timer_.reset();
   }
+  if (vehicle_) {vehicle_->deactivate();}
   rclcpp_lifecycle::LifecycleNode::on_deactivate(state);
   controller_state_.store(ControllerState::Idle);
-  RCLCPP_INFO(get_logger(), "deactivated: setpoint stream stopped, control handed to PX4");
+  RCLCPP_INFO(get_logger(),
+    "deactivated: setpoint stream stopped, control handed back to the autopilot");
   return CallbackReturn::SUCCESS;
 }
 
@@ -255,13 +237,10 @@ CallbackReturn NmpcNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   solver_.reset();
   trajectory_.reset();
   model_.reset();
-  sub_local_position_.reset();
-  sub_attitude_.reset();
-  sub_angular_velocity_.reset();
-  sub_vehicle_status_.reset();
-  pub_attitude_setpoint_.reset();
-  pub_offboard_mode_.reset();
-  pub_command_.reset();
+  if (vehicle_) {
+    vehicle_->teardown();
+    vehicle_.reset();
+  }
   pub_status_.reset();
   pub_predicted_path_.reset();
   pub_reference_path_.reset();
@@ -345,12 +324,24 @@ void NmpcNode::declareParameters()
   declare_parameter("shift_on_warm_start", true,
     descriptor("shift the previous solution one stage forward"));
 
-  // --- airframe + PX4 interface ---------------------------------------------------------------
+  // --- vehicle backend --------------------------------------------------------------------------
+  // Read-only: the backend is constructed in on_configure, so switching it needs a
+  // deactivate -> cleanup -> configure cycle rather than a live parameter set.
+  declare_parameter("vehicle_interface", "generic",
+    descriptor(
+      "autopilot backend: 'generic' (standard ROS 2 messages, no px4_msgs needed) or "
+      "'px4' (px4_msgs over uXRCE-DDS; only available when px4_msgs was found at build time)",
+      true));
+
+  // --- airframe + thrust calibration ------------------------------------------------------------
   declare_parameter("airframe_params_path", "",
     descriptor("absolute path to params/*_calibration.yaml (launch fills this in)", true));
   declare_parameter("px4_hover_thrust", 0.62,
-    descriptor("PX4 MPC_THR_HOVER — MUST match config/px4_overrides.yaml", false, 0.0, 1.0, true));
-  declare_parameter("auto_arm", false, descriptor("arm via VehicleCommand on takeoff (SITL/CI)"));
+    descriptor("hover thrust calibration [0,1]; with the px4 backend this MUST match "
+      "MPC_THR_HOVER in config/px4_overrides.yaml", false, 0.0, 1.0, true));
+  declare_parameter("auto_arm", false,
+    descriptor("request arming automatically on takeoff (SITL/CI only; no-op on backends "
+      "without an autopilot handshake)"));
 
   // --- mission -------------------------------------------------------------------------------
   declare_parameter("takeoff_altitude_m", 1.5,
@@ -402,6 +393,7 @@ bool NmpcNode::loadParameters(std::string * error)
   status_publish_rate_hz_ = get_parameter("status_publish_rate_hz").as_double();
   log_solve_time_warn_ms_ = get_parameter("log_solve_time_warn_ms").as_double();
   airframe_params_path_ = get_parameter("airframe_params_path").as_string();
+  vehicle_interface_kind_ = get_parameter("vehicle_interface").as_string();
 
   // --- solver config -------------------------------------------------------------------------
   solver_config_.horizon_steps = get_parameter("horizon_steps").as_int();
@@ -494,6 +486,7 @@ rcl_interfaces::msg::SetParametersResult NmpcNode::onParameterUpdate(
   // with "invalid parameter" (§9.1).
   const std::vector<std::string> read_only = {
     "horizon_steps", "horizon_time", "attitude_rep", "airframe_params_path",
+    "vehicle_interface",
     "max_sqp_iterations"};
   for (const auto & p : params) {
     for (const auto & ro : read_only) {
@@ -604,61 +597,44 @@ rcl_interfaces::msg::SetParametersResult NmpcNode::onParameterUpdate(
 }
 
 // ================================================================================================
-// Subscriptions
+// Vehicle interface callbacks
 // ================================================================================================
 
-// [px4_msgs] VehicleLocalPosition is NED. The *_valid flags gate everything: PX4 publishes
-// the message continuously, with some estimates invalid during startup.
-void NmpcNode::onLocalPosition(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg)
+// Backends deliver samples already in world-ENU / body-FLU; all frame conversion happens inside
+// the backend (§16). A sample may be partial — the PX4 backend splits position, attitude and
+// rates across three topics — so each field is stamped independently and the staleness check in
+// assembleState() covers all three.
+void NmpcNode::onOdometry(const VehicleOdometry & odom)
 {
-  if (!msg->xy_valid || !msg->z_valid || !msg->v_xy_valid || !msg->v_z_valid) {
-    return;  // incomplete estimate — keep the previous sample; staleness check will catch a gap
-  }
-  const Eigen::Vector3d p_ned(msg->x, msg->y, msg->z);
-  const Eigen::Vector3d v_ned(msg->vx, msg->vy, msg->vz);
-  {
-    std::lock_guard<std::mutex> lk(state_mutex_);
-    position_enu_ = nedToEnu(p_ned);
-    velocity_enu_ = nedToEnu(v_ned);
+  const rclcpp::Time stamp = this->now();
+  std::lock_guard<std::mutex> lk(state_mutex_);
+  if (odom.has_position) {
+    position_enu_ = odom.position_enu;
     position_valid_ = true;
-    last_position_stamp_ = this->now();
+    last_position_stamp_ = stamp;
+  }
+  if (odom.has_velocity) {
+    velocity_enu_ = odom.velocity_enu;
+  }
+  if (odom.has_attitude) {
+    attitude_enu_flu_ = odom.attitude_enu_flu;
+    last_attitude_stamp_ = stamp;
+  }
+  if (odom.has_rates) {
+    body_rates_flu_ = odom.body_rates_flu;
+    last_rates_stamp_ = stamp;
   }
 }
 
-// [px4_msgs] VehicleAttitude::q is (w, x, y, z) in NED/FRD (§7.5).
-void NmpcNode::onAttitude(const px4_msgs::msg::VehicleAttitude::SharedPtr msg)
+void NmpcNode::onVehicleStatus(const VehicleStatusFlags & flags)
 {
-  const Eigen::Quaterniond q_ned_frd(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
-  {
-    std::lock_guard<std::mutex> lk(state_mutex_);
-    attitude_enu_flu_ = quatNedFrdToEnuFlu(q_ned_frd);
-    last_attitude_stamp_ = this->now();
-  }
-}
-
-// [px4_msgs] FRD -> FLU is (x, -y, -z) — body rates flip sign in the lateral axes.
-void NmpcNode::onAngularVelocity(const px4_msgs::msg::VehicleAngularVelocity::SharedPtr msg)
-{
-  const Eigen::Vector3d w_frd(msg->xyz[0], msg->xyz[1], msg->xyz[2]);
-  const Eigen::Vector3d w_flu(w_frd.x(), -w_frd.y(), -w_frd.z());
-  {
-    std::lock_guard<std::mutex> lk(state_mutex_);
-    body_rates_flu_ = w_flu;
-    last_rates_stamp_ = this->now();
-  }
-}
-
-// [px4_msgs] Constants live on the message (ARMING_STATE_ARMED, NAVIGATION_STATE_OFFBOARD);
-// verify against the pinned px4_msgs version — names have moved between releases.
-void NmpcNode::onVehicleStatus(const px4_msgs::msg::VehicleStatus::SharedPtr msg)
-{
-  armed_.store(msg->arming_state == px4_msgs::msg::VehicleStatus::ARMING_STATE_ARMED);
+  armed_.store(flags.armed);
   const bool was_offboard = offboard_active_.load();
-  offboard_active_.store(
-    msg->nav_state == px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_OFFBOARD);
+  offboard_active_.store(flags.offboard_active);
   // Pilot took over while we were tracking: drop to Streaming and log loudly (§7.3).
-  if (was_offboard && !offboard_active_.load() &&
-      controller_state_.load() == ControllerState::Tracking) {
+  if (was_offboard && !flags.offboard_active &&
+      controller_state_.load() == ControllerState::Tracking)
+  {
     RCLCPP_ERROR(get_logger(), "offboard lost while tracking — pilot has taken over");
     controller_state_.store(ControllerState::Streaming);
   }
@@ -668,7 +644,7 @@ void NmpcNode::onVehicleStatus(const px4_msgs::msg::VehicleStatus::SharedPtr msg
 // Services
 // ================================================================================================
 
-// [px4_msgs] No px4_msgs types here — pure uav_mpc interfaces. Rejected unless the controller
+// Backend-independent: pure uav_mpc interfaces. Rejected unless the controller
 // is in Tracking/Streaming and the new trajectory starts within max_jump_on_switch of the
 // current position. Sending a HOVER request with altitude <= 0.5 m requests a landing (§7.3).
 void NmpcNode::onSetTrajectory(
@@ -782,7 +758,7 @@ void NmpcNode::controlLoop()
   std::string why;
   if (!assembleState(&x0, &why)) {
     enterFailsafe(why);
-    publishOffboardControlMode();   // EVERY tick, unconditionally, even in Failsafe (§7.4)
+    if (vehicle_) {vehicle_->publishControlMode();}  // EVERY tick, even in Failsafe (§7.4)
     return;
   }
   last_x0_ = x0;
@@ -833,7 +809,7 @@ void NmpcNode::controlLoop()
     const Eigen::VectorXd u0 = solver_->optimalInput();
     last_applied_input_ = u0;
     const Eigen::VectorXd x_pred_1 = solver_->predictedState(1);
-    pub_attitude_setpoint_->publish(toAttitudeSetpoint(u0, x_pred_1));
+    if (vehicle_) {vehicle_->publishSetpoint(buildCommand(u0, x_pred_1));}
   } else {
     // Hold the previous input (spec §6.5): do not publish a fresh (possibly garbage) command.
     if (result.ok() && state == ControllerState::Failsafe) {
@@ -844,7 +820,7 @@ void NmpcNode::controlLoop()
   }
 
   // --- 7. telemetry -------------------------------------------------------------------------------
-  publishOffboardControlMode();
+  if (vehicle_) {vehicle_->publishControlMode();}
   publishStatus(result, x0);
   publishVisualisation();
 
@@ -900,15 +876,15 @@ Eigen::VectorXd NmpcNode::compensateLatency(
   return x_pred;
 }
 
-// [px4_msgs] VehicleAttitudeSetpoint field names differ across PX4 releases (roll_body /
-// pitch_body / yaw_body were removed in favour of q_d). Verify against the pinned px4_msgs
-// message definition before trusting this — §7.5.
-px4_msgs::msg::VehicleAttitudeSetpoint NmpcNode::toAttitudeSetpoint(
-  const Eigen::VectorXd & u0, const Eigen::VectorXd & x_pred_1) const
+// Frame-neutral command (world ENU / body FLU). The active backend converts it into whatever
+// the autopilot wants — the PX4 backend does the ENU/FLU -> NED/FRD conversion and the sign
+// flips; the generic backend publishes it verbatim.
+AttitudeThrustCommand NmpcNode::buildCommand(
+  const Eigen::VectorXd & u0, const Eigen::VectorXd & x_pred_1)
 {
-  px4_msgs::msg::VehicleAttitudeSetpoint msg{};
+  AttitudeThrustCommand cmd;
 
-  // Collective thrust [N] from the per-rotor command (PX4 quad-X allocation, §4.3).
+  // Collective thrust [N] from the per-rotor command (quad-X allocation, §4.3).
   double T = 0.0;
   Eigen::Vector3d tau;
   model_->allocate(u0, &T, &tau);
@@ -919,24 +895,14 @@ px4_msgs::msg::VehicleAttitudeSetpoint NmpcNode::toAttitudeSetpoint(
     x_pred_1(Layout::kAttIdx + 2), x_pred_1(Layout::kAttIdx + 3));
   q_d_enu.normalize();
   last_q_d_enu_ = q_d_enu;
-  const Eigen::Quaterniond q_d_ned_frd = quatEnuFluToNedFrd(q_d_enu);
 
-  // [px4_msgs] q_d is (w, x, y, z) floats.
-  msg.q_d[0] = static_cast<float>(q_d_ned_frd.w());
-  msg.q_d[1] = static_cast<float>(q_d_ned_frd.x());
-  msg.q_d[2] = static_cast<float>(q_d_ned_frd.y());
-  msg.q_d[3] = static_cast<float>(q_d_ned_frd.z());
-
-  // PX4 is FRD: positive thrust on NEGATIVE z. thrust_body is normalised [0, 1].
-  msg.thrust_body[0] = 0.0f;
-  msg.thrust_body[1] = 0.0f;
-  msg.thrust_body[2] = static_cast<float>(-normaliseThrust(T));
-
+  cmd.attitude_enu_flu = q_d_enu;
+  cmd.collective_thrust_newton = T;
+  cmd.normalised_thrust = normaliseThrust(T);
   // Predicted body-z rate at stage 1 (rates are the last three states).
-  msg.yaw_sp_move_rate = static_cast<float>(x_pred_1(Layout::kRateIdx + 2));
-
-  msg.timestamp = nowUs(*get_clock());
-  return msg;
+  cmd.yaw_rate_feedforward = x_pred_1(Layout::kRateIdx + 2);
+  for (int i = 0; i < 4; ++i) {cmd.rotor_thrust_newton(i) = u0(i);}
+  return cmd;
 }
 
 double NmpcNode::normaliseThrust(double collective_thrust_newton) const
@@ -972,7 +938,9 @@ void NmpcNode::fillTakeoffLandingHorizon(
     xr(Layout::kPosIdx) = x0(Layout::kPosIdx);          // keep current xy
     xr(Layout::kPosIdx + 1) = x0(Layout::kPosIdx + 1);
     xr(Layout::kPosIdx + 2) = z_k;
-    xr(Layout::kAttIdx + 3) = 1.0;                      // level attitude, w = 1
+    // Level attitude: the quaternion is (w, x, y, z), so the identity puts 1.0 in the FIRST
+    // slot. Writing to kAttIdx + 3 would set qz = 1, i.e. a 180-degree yaw reference.
+    xr(Layout::kAttIdx) = 1.0;
     if (k < n) {
       u_refs_[static_cast<std::size_t>(k)].setConstant(hover_thrust_n);
     }
@@ -980,80 +948,22 @@ void NmpcNode::fillTakeoffLandingHorizon(
 }
 
 // ================================================================================================
-// PX4 handshake
+// Autopilot handshake (delegated to the backend)
 // ================================================================================================
 
-// [px4_msgs] OffboardControlMode: only the `attitude` channel is requested — the NMPC outputs
-// attitude + normalised thrust, and PX4's attitude/rate loops close the inner loop.
-void NmpcNode::publishOffboardControlMode()
-{
-  px4_msgs::msg::OffboardControlMode msg{};
-  msg.timestamp = nowUs(*get_clock());
-  msg.position = false;
-  msg.velocity = false;
-  msg.acceleration = false;
-  msg.attitude = true;
-  msg.body_rate = false;
-  ++offboard_stream_counter_;
-  pub_offboard_mode_->publish(msg);
-}
-
-// [px4_msgs] VehicleCommand: target/source system+component MUST all be 1 and from_external
-// MUST be true or PX4 ignores the command (§7.5).
-void NmpcNode::requestOffboardMode()
-{
-  if (offboard_stream_counter_ < kOffboardPreStreamCount) {return;}  // PX4 needs a warm stream
-  if (offboard_active_.load()) {return;}
-
-  px4_msgs::msg::VehicleCommand cmd{};
-  cmd.timestamp = nowUs(*get_clock());
-  cmd.target_system = 1;
-  cmd.target_component = 1;
-  cmd.source_system = 1;
-  cmd.source_component = 1;
-  cmd.from_external = true;
-  cmd.command = px4_msgs::msg::VehicleCommand::VEHICLE_CMD_DO_SET_MODE;
-  cmd.param1 = 1.0f;  // main mode: OFFBOARD
-  cmd.param2 = 6.0f;  // sub mode: offboard (mode 6)
-  pub_command_->publish(cmd);
-  RCLCPP_INFO_THROTTLE(get_logger(), get_clock(), 2000, "requesting OFFBOARD mode");
-}
-
-// [px4_msgs] VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, param1 = 1. No-op unless the
-// auto_arm param is set (SITL/CI only — never auto-arm on real hardware).
+// Arming is a human action on real hardware — auto_arm exists for SITL and CI only. Backends
+// without an autopilot handshake (the generic one) no-op these.
 void NmpcNode::requestArm()
 {
   if (!auto_arm_) {return;}
   if (armed_.load()) {return;}
-
-  px4_msgs::msg::VehicleCommand cmd{};
-  cmd.timestamp = nowUs(*get_clock());
-  cmd.target_system = 1;
-  cmd.target_component = 1;
-  cmd.source_system = 1;
-  cmd.source_component = 1;
-  cmd.from_external = true;
-  cmd.command = px4_msgs::msg::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM;
-  cmd.param1 = 1.0f;  // arm
-  pub_command_->publish(cmd);
-  RCLCPP_INFO_THROTTLE(get_logger(), get_clock(), 2000, "requesting ARM (auto_arm)");
+  if (vehicle_) {vehicle_->requestArm();}
 }
 
 void NmpcNode::requestDisarm()
 {
   if (!auto_arm_) {return;}
-
-  px4_msgs::msg::VehicleCommand cmd{};
-  cmd.timestamp = nowUs(*get_clock());
-  cmd.target_system = 1;
-  cmd.target_component = 1;
-  cmd.source_system = 1;
-  cmd.source_component = 1;
-  cmd.from_external = true;
-  cmd.command = px4_msgs::msg::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM;
-  cmd.param1 = 0.0f;  // disarm
-  pub_command_->publish(cmd);
-  RCLCPP_INFO(get_logger(), "requesting DISARM");
+  if (vehicle_) {vehicle_->requestDisarm();}
 }
 
 // ================================================================================================
@@ -1068,7 +978,7 @@ void NmpcNode::updateControllerState()
       return;  // timer should not be running, but be safe
 
     case ControllerState::Streaming: {
-      requestOffboardMode();
+      if (vehicle_) {vehicle_->requestOffboard();}
       if (offboard_active_.load() && !armed_.load()) {requestArm();}
       if (offboard_active_.load() && armed_.load()) {
         controller_state_.store(ControllerState::Takeoff);
@@ -1135,11 +1045,15 @@ void NmpcNode::enterFailsafe(const std::string & reason)
   }
 
   // Level attitude + hover thrust, straight to PX4 (bypasses the NMPC entirely).
-  px4_msgs::msg::VehicleAttitudeSetpoint sp{};
-  sp.q_d[0] = 1.0f;  // identity (level) in both ENU and NED
-  sp.thrust_body[2] = static_cast<float>(-normaliseThrust(hover_thrust_n_));
-  sp.timestamp = nowUs(*get_clock());
-  pub_attitude_setpoint_->publish(sp);
+  // Level attitude + hover thrust, straight to the backend (bypasses the NMPC entirely).
+  // hover_thrust_n_ is PER ROTOR; the collective thrust is four times that.
+  AttitudeThrustCommand sp;
+  sp.attitude_enu_flu = Eigen::Quaterniond::Identity();
+  sp.collective_thrust_newton = 4.0 * hover_thrust_n_;
+  sp.normalised_thrust = normaliseThrust(sp.collective_thrust_newton);
+  sp.yaw_rate_feedforward = 0.0;
+  sp.rotor_thrust_newton.setConstant(hover_thrust_n_);
+  if (vehicle_) {vehicle_->publishSetpoint(sp);}
 }
 
 // ================================================================================================

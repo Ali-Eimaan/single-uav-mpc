@@ -4,8 +4,10 @@
   <name>uav_mpc</name>
   <version>0.1.0</version>
   <description>
-    Real-time nonlinear MPC for a 12-state quadrotor on ROS 2 Lyrical Luth, using an acados-generated
-    SQP-RTI solver and speaking to PX4 over uXRCE-DDS.
+    Real-time nonlinear MPC for a 12-state quadrotor on ROS 2 Lyrical Luth, using an
+    acados-generated SQP-RTI solver. Speaks standard ROS 2 messages by default
+    (nav_msgs/Odometry in, uav_mpc/AttitudeThrustSetpoint out); a PX4 uXRCE-DDS backend is
+    compiled in as an optional extra when px4_msgs is available.
   </description>
 
   <maintainer email="ali.eimaan@icloud.com">Ali-Eimaan</maintainer>
@@ -25,7 +27,15 @@
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>builtin_interfaces</depend>
-  <depend>px4_msgs</depend>
+  <!--
+    px4_msgs is deliberately NOT a dependency. It is not released for ROS 2 Lyrical Luth, and
+    the controller does not need it: the default `generic` vehicle backend uses standard ROS 2
+    messages only. When px4_msgs happens to be in the workspace, CMake detects it and compiles
+    the optional PX4 backend as well (select it with `vehicle_interface:=px4`).
+
+    Declaring it here — even as an <exec_depend> — would make `rosdep install` and the buildfarm
+    fail on Lyrical, which is exactly what this design avoids. See .deepseek/07_NODE.md §7.10.
+  -->
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_eigen</depend>

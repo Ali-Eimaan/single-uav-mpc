@@ -65,6 +65,32 @@ repository; one that says "procedure written, not yet flown" reads as rigorous.
 benchmark budget, any solver infeasibility in flight, position error beyond 0.5 m, or link
 loss. Any one of these → kill switch, land, review the log.
 
+## 3.5 Choosing the vehicle backend
+
+`px4_msgs` is not released for ROS 2 Lyrical Luth, so the controller ships with two backends
+(`.deepseek/07_NODE.md` §7.10). Pick before you power anything on:
+
+| Situation | Setting |
+| --- | --- |
+| Pixhawk + PX4, workspace has px4_msgs | `vehicle_interface:=px4` |
+| Pixhawk + PX4, no px4_msgs available | `vehicle_interface:=generic` + a MAVROS/uXRCE adapter you write and test on the bench first |
+| Crazyflie 2.1 | `vehicle_interface:=generic` (§4) |
+| Mocap-driven bench rig, any airframe | `vehicle_interface:=generic` |
+
+**Safety consequence of `generic`:** it has no arm/offboard handshake. The controller assumes
+it always has authority and begins publishing setpoints the moment it is activated. With the
+`px4` backend, PX4 refuses commands until it is armed and in offboard mode — that refusal is a
+safety layer you lose with `generic`. Whatever consumes `~/attitude_setpoint` must therefore
+implement:
+
+- [ ] an arming interlock the pilot controls
+- [ ] a setpoint-staleness watchdog that latches thrust to zero (100 ms is the value used by the
+      Crazyflie adapter in §4)
+- [ ] the kill switch, independent of this software
+
+Do not fly `generic` on a real vehicle until those three exist and have been bench-tested with
+props off.
+
 ## 4. Crazyflie 2.1 backend
 
 **Status: written**

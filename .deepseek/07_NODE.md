@@ -7,7 +7,23 @@
 **Milestone:** M6
 **Done when:** the vehicle hovers autonomously in SITL (criterion A6).
 
-Topic map:
+The node itself is **autopilot-agnostic**. Vehicle I/O is delegated to a `VehicleInterface`
+backend selected at runtime (§7.10); the node's own topics are the same either way:
+
+```
+OUT: ~/status                            uav_mpc/NmpcStatus
+     ~/predicted_path, ~/reference_path  nav_msgs/Path          (ENU, RViz)
+SRV: ~/set_trajectory                    uav_mpc/SetTrajectory
+```
+
+Backend topics — `generic` (default, no px4_msgs):
+
+```
+IN : ~/odometry                          nav_msgs/Odometry      (world ENU, body twist)
+OUT: ~/attitude_setpoint                 uav_mpc/AttitudeThrustSetpoint  (ENU/FLU)
+```
+
+Backend topics — `px4` (only when px4_msgs is present):
 
 ```
 IN : /fmu/out/vehicle_local_position     VehicleLocalPosition   (NED)
@@ -17,8 +33,6 @@ IN : /fmu/out/vehicle_local_position     VehicleLocalPosition   (NED)
 OUT: /fmu/in/offboard_control_mode       OffboardControlMode    @ 100 Hz, unconditional
      /fmu/in/vehicle_attitude_setpoint   VehicleAttitudeSetpoint
      /fmu/in/vehicle_command             VehicleCommand         (arm / mode switch)
-     ~/status                            uav_mpc/NmpcStatus
-     ~/predicted_path, ~/reference_path  nav_msgs/Path          (ENU, RViz)
 ```
 
 ---
@@ -75,7 +89,7 @@ arriving. Publish hover setpoints there.
 
 ```
  1. now = get_clock()->now();  measure the period since the last tick
- 2. if (!assembleState(&x0, &why))            → enterFailsafe(why); publishOffboardControlMode(); return
+ 2. if (!assembleState(&x0, &why))     → enterFailsafe(why); vehicle_->publishControlMode(); return
  3. updateControllerState()
  4. x0 = compensateLatency(x0, latency_compensation_s_)
  5. refs = trajectory_->referenceHorizon(t_traj, dt, N, airframe_, rep)
@@ -83,8 +97,8 @@ arriving. Publish hover setpoints there.
  7. result = solver_->solve()
  8. if (result.ok())  u0 = solver_->optimalInput();  last_applied_input_ = u0
     else              hold last_applied_input_  (and count the failure)
- 9. pub_attitude_setpoint_->publish(toAttitudeSetpoint(u0, solver_->predictedState(1)))
-10. publishOffboardControlMode()      ← EVERY tick, unconditionally, including in Failsafe
+ 9. vehicle_->publishSetpoint(buildCommand(u0, solver_->predictedState(1)))
+10. vehicle_->publishControlMode()    ← EVERY tick, unconditionally, including in Failsafe
 11. publishStatus(result, x0); publishVisualisation()
 ```
 
@@ -148,3 +162,75 @@ requirement for the demo to run.
 Two callback groups: `control_callback_group_` (MutuallyExclusive — the timer) and
 `telemetry_callback_group_` (Reentrant — subscriptions and the service). Cached state is guarded
 by `state_mutex_`; hold it only to copy in/out, never across a solve.
+
+---
+
+## §7.10 Vehicle interface (autopilot abstraction)
+
+`px4_msgs` is **not** a dependency of this package. It is not released for ROS 2 Lyrical Luth,
+and a controller that cannot build on its target distro is not a controller. All autopilot
+coupling therefore lives behind `VehicleInterface` (`include/uav_mpc/vehicle_interface.hpp`).
+
+| Backend | File | Built when | Selected by |
+| --- | --- | --- | --- |
+| `generic` | `src/vehicle_interface.cpp` | always | `vehicle_interface:=generic` (default) |
+| `px4` | `src/vehicle_interface_px4.cpp` | `px4_msgs` found at configure time | `vehicle_interface:=px4` |
+
+Rules that keep this honest:
+
+1. **No file outside `vehicle_interface_px4.cpp` may include a px4_msgs header.** That file is
+   wrapped entirely in `#ifdef UAV_MPC_WITH_PX4_MSGS`, so it compiles to an empty translation
+   unit when the package is absent and can be listed unconditionally in CMake.
+2. **`package.xml` must not declare px4_msgs** — not even as `<exec_depend>`. Declaring it
+   makes `rosdep install` fail on Lyrical, which is the whole problem being solved.
+3. **Never export px4_msgs** from `ament_export_dependencies`. It is an implementation detail of
+   one backend; exporting it pushes the dependency onto every consumer.
+4. **Requesting an unavailable backend must fail loudly.** `makeVehicleInterface("px4", &err)`
+   returns nullptr with an actionable message when the backend was not compiled in;
+   `on_configure` reports FAILURE. Do not fall back to `generic` silently — a pilot who asked
+   for PX4 and got an unconnected generic publisher would not find out until the vehicle failed
+   to respond.
+
+### Backend contract
+
+- Backends convert to/from the controller's conventions (world ENU, body FLU, Hamilton
+  quaternion) internally. `VehicleOdometry` is always already converted; the node never sees a
+  NED value. This is the only place frame conversions may appear outside
+  `quadrotor_dynamics.cpp`.
+- `VehicleOdometry` samples may be **partial**. PX4 splits position, attitude and rates across
+  three topics, so each `has_*` flag is set independently and the node stamps only the fields
+  present. The generic backend sets all four from one `nav_msgs/Odometry`.
+- `publishSetpoint()` and `publishControlMode()` run inside the 100 Hz loop: no allocation, no
+  blocking, no logging that is not throttled.
+- `hasAutopilotHandshake()` tells the node whether `armed`/`offboard_active` are *measured* or
+  merely *assumed*. The generic backend has no autopilot to ask, so it reports authority
+  immediately and the node logs a warning at configure time saying so.
+
+### §7.10.1 Generic backend I/O
+
+```
+IN   ~/odometry           nav_msgs/msg/Odometry
+       pose.pose          world frame, taken to be ENU
+       twist.twist        CHILD (body) frame per the nav_msgs contract — the backend rotates
+                          the linear part into the world frame before handing it over
+OUT  ~/attitude_setpoint  uav_mpc/msg/AttitudeThrustSetpoint  (ENU/FLU)
+```
+
+QoS is Reliable+Volatile here, unlike PX4's BestEffort bridge: a generic source is an ordinary
+ROS 2 publisher.
+
+The body-frame twist is easy to get wrong — using it as a world velocity is invisible at hover
+and shows up as a heading-dependent tracking error in forward flight.
+
+## §7.11 PX4 backend status
+
+The PX4 backend is **UNVERIFIED**: it has never been compiled, because `px4_msgs` is not
+installed here. Before trusting it, check every field name and constant against the message
+definitions in the pinned `px4_msgs` release — `VehicleAttitudeSetpoint` in particular changed
+shape across PX4 versions (`roll_body`/`pitch_body`/`yaw_body` were removed in favour of `q_d`).
+
+Two sign conventions in that file are worth re-deriving rather than trusting:
+
+- `thrust_body[2] = -normalised_thrust` — PX4 is FRD, so positive thrust acts on negative z.
+- `yaw_sp_move_rate = -yaw_rate_feedforward` — the z axis flips between ENU/FLU and NED/FRD, so
+  the yaw rate flips sign with it.

@@ -18,6 +18,9 @@ have a file open and need its spec.
 | `include/uav_mpc/acados_wrapper.hpp` | [06_SOLVER.md](06_SOLVER.md) | M5 |
 | `src/acados_wrapper.cpp` | [06_SOLVER.md](06_SOLVER.md) | M5 |
 | `include/uav_mpc/nmpc_node.hpp` | [07_NODE.md](07_NODE.md) | M6 |
+| `include/uav_mpc/vehicle_interface.hpp` | [07_NODE.md §7.10](07_NODE.md) | M6 |
+| `src/vehicle_interface.cpp` (generic backend + factory) | [07_NODE.md §7.10.1](07_NODE.md) | M6 |
+| `src/vehicle_interface_px4.cpp` (optional PX4 backend) | [07_NODE.md §7.11](07_NODE.md) | M6 |
 | `src/nmpc_node.cpp` | [07_NODE.md](07_NODE.md) | M6 |
 | `src/main.cpp` | [07_NODE.md §7.8](07_NODE.md) | M6 |
 
@@ -28,6 +31,7 @@ have a file open and need its spec.
 | `msg/SolverDiagnostics.msg` | `NmpcStatus`, `assert_hover.py`, both notebooks |
 | `msg/TrajectorySpec.msg` | `SetTrajectory.srv`, `FollowTrajectory.action` |
 | `msg/NmpcStatus.msg` | `~/status`, all analysis |
+| `msg/AttitudeThrustSetpoint.msg` | generic backend output; any downstream adapter |
 | `srv/SetTrajectory.srv` | `figure8.launch.py`, runtime trajectory swap |
 | `action/FollowTrajectory.action` | not wired in v0.1; generated for downstream use |
 
