@@ -138,11 +138,10 @@ TEST(TrajectoryContinuity, Figure8AnalyticDerivativesMatchFiniteDifferences)
     gen, 0.0, 2.0 * period,
     [](const FlatState & s) {return s.snap;},
     [](const FlatState & s) {return s.jerk;});
-  // The figure-8 yaw wraps at t = period/8 * 3 and period/8 * 5 where y_dot = 0 and
-  // x_dot < 0 (atan2 jumps from pi to -pi).  Check only over [0, 2.5] (before the first
-  // wrap at t = 3) where the raw yaw angle is continuous.
+  // R2-13: with continuousFigure8Yaw the yaw is unwrapped, so the full
+  // period can be checked without hitting the atan2 branch cut.
   checkScalarDerivative(
-    gen, 0.0, 2.5,
+    gen, 0.0, 2.0 * period,
     [](const FlatState & s) {return s.yaw_rate;},
     [](const FlatState & s) {return s.yaw;});
 }
@@ -209,11 +208,11 @@ auto oneSidedLimit(F && deriv, double boundary, int k, int side)
 // The ramp-in must not introduce a jerk step at t = 0 or t = ramp_in_time.
 TEST(TrajectoryContinuity, RampInIsC4)
 {
-  // Use a 2 s ramp: the figure-8 yaw wraps at t = period/8 * 3 = 3.0, so ending the
-  // ramp at t = 3.0 would put the one-sided yaw limits on opposite sides of the
-  // atan2 ±pi boundary.  A 2 s ramp keeps both sides on the same branch.
-  const TrajectoryGenerator gen(figure8Params(2.0));
-  const double ramp = 2.0;
+  // R2-13: use the shipped default ramp_in_time = 3.0 s.  With
+  // continuousFigure8Yaw the unwrapped yaw is continuous across the
+  // full ramp, so no wrap-aware comparison is needed.
+  const TrajectoryGenerator gen(figure8Params(3.0));
+  const double ramp = 3.0;
 
   // Use the analytic derivatives from sample() directly — nested finite differences
   // amplify floating-point noise by (2*kDt)^-k (≈ 10^15 at order 4), which makes
@@ -239,7 +238,8 @@ TEST(TrajectoryContinuity, RampInIsC4)
         << "position derivative order " << k << " at t = " << boundary;
     }
     // Yaw C^2: the yaw blend is b_yaw = hover.yaw + S*(traj.yaw - hover.yaw) with
-    // S^(k)(0) = S^(k)(1) = 0 for k >= 1.
+    // S^(k)(0) = S^(k)(1) = 0 for k >= 1.  R2-13: yaw is now unwrapped, so the
+    // raw derivative comparison is valid without any wrap-aware adjustment.
     for (int k = 0; k <= 2; ++k) {
       auto deriv = [&gen, k](double t) -> double {
           const FlatState s = gen.sample(t);
@@ -249,24 +249,31 @@ TEST(TrajectoryContinuity, RampInIsC4)
             default: return s.yaw_accel;
           }
         };
-      // Handle the ±π wrap in raw yaw (k = 0) by using std::remainder on the
-      // one-sided limits.
       double left = oneSidedLimit(deriv, boundary, k, -1);
       double right = oneSidedLimit(deriv, boundary, k, +1);
-      if (k == 0) {
-        // The blend is continuous but the yaw value may differ by 2π;
-        // the physical orientation is the same.
-        double diff = std::remainder(left - right, 2.0 * M_PI);
-        const double scale = 1.0 + std::max(std::abs(left), std::abs(right));
-        EXPECT_LT(std::abs(diff), kRelTol * scale)
-          << "yaw (wrap-aware) at t = " << boundary
-          << ": left " << left << " right " << right;
-      } else {
-        const double scale = 1.0 + std::max(std::abs(left), std::abs(right));
-        EXPECT_LT(std::abs(left - right), kRelTol * scale)
-          << "yaw derivative order " << k << " at t = " << boundary;
-      }
+      const double scale = 1.0 + std::max(std::abs(left), std::abs(right));
+      EXPECT_LT(std::abs(left - right), kRelTol * scale)
+        << "yaw derivative order " << k << " at t = " << boundary;
     }
+  }
+}
+
+// R2-13: regression test — place the ramp so a yaw wrap (atan2 branch cut) falls
+// strictly inside the ramp interval.  With continuousFigure8Yaw this must produce
+// a bounded yaw rate (no instantaneous 2π/0 spike).
+TEST(TrajectoryContinuity, RampInHandlesYawWrap)
+{
+  // ramp_in_time = 4.0, period = 8.0: the first yaw wrap is at t = 3.0,
+  // which falls inside the ramp.  Without unwrapping this would produce
+  // an s0·2π yaw jump at the blend boundary.
+  const TrajectoryGenerator gen(figure8Params(4.0));
+  const double ramp = 4.0;
+  const double dt = 0.001;
+  // Check the whole ramp at 1 ms resolution.
+  for (double t = 0.0; t <= ramp; t += dt) {
+    const FlatState s = gen.sample(t);
+    EXPECT_LT(std::abs(s.yaw_rate), 10.0)
+      << "yaw_rate spike at t = " << t;
   }
 }
 

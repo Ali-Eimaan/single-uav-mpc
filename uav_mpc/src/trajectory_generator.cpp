@@ -11,6 +11,7 @@
 #include "uav_mpc/trajectory_generator.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -131,6 +132,22 @@ bool yawFromVelocity(
   const double num2 = x_dot * y_dddot - y_dot * x_dddot;
   *yaw_accel = num2 / r2 - 2.0 * num1 * (x_dot * x_ddot + y_dot * y_ddot) / (r2 * r2);
   return true;
+}
+
+/// Continuous (unwrapped) yaw for the Gerono figure-8.  The principal yaw from atan2(ẏ, ẋ)
+/// jumps by ±2π when the velocity vector crosses the negative x-axis (ẏ = 0, ẋ < 0).
+/// This happens at ωt = 3π/4 + 2πn and 5π/4 + 2πn for positive amplitudes.
+/// Derived in .deepseek/REVIEW.md R2-13.
+double continuousFigure8Yaw(double theta)
+{
+  // theta = ωt mod 2π, normalised to [0, 2π)
+  double psi = std::atan2(std::cos(2.0 * theta), std::cos(theta));
+  // Branch-cut crossing at θ = 3π/4: atan2 jumps from -π to +π.
+  // The continuous yaw continues decreasing past -π, so subtract 2π.
+  if (theta >= 3.0 * M_PI / 4.0 && theta < 5.0 * M_PI / 4.0) {
+    psi -= 2.0 * M_PI;
+  }
+  return psi;
 }
 
 }  // namespace
@@ -423,6 +440,27 @@ std::vector<StateInputReference> TrajectoryGenerator::referenceHorizon(
   return out;
 }
 
+void TrajectoryGenerator::referenceHorizon(
+  double t0, double dt, int n_steps, const QuadrotorParams & airframe,
+  AttitudeRep rep, std::vector<Eigen::VectorXd> * x_refs,
+  std::vector<Eigen::VectorXd> * u_refs) const
+{
+  assert(x_refs != nullptr && u_refs != nullptr);
+  assert(x_refs->size() == static_cast<std::size_t>(n_steps) + 1);
+  assert(u_refs->size() == static_cast<std::size_t>(n_steps));
+
+  const std::vector<FlatState> flats = sampleHorizon(t0, dt, n_steps);
+  const ControlAllocation alloc = ControlAllocation::fromParams(airframe);
+
+  for (std::size_t k = 0; k < flats.size(); ++k) {
+    const StateInputReference ref = flatToStateInput(flats[k], airframe, alloc, rep);
+    (*x_refs)[k] = ref.state;
+    if (k < static_cast<std::size_t>(n_steps)) {
+      (*u_refs)[k] = ref.input;
+    }
+  }
+}
+
 double TrajectoryGenerator::duration() const
 {
   if (params_.type == TrajectoryType::Waypoints) {
@@ -569,6 +607,9 @@ FlatState TrajectoryGenerator::sampleFigure8(double t) const
   if (params_.yaw_follows_velocity) {
     yawFromVelocity(x_d, y_d, x_dd, y_dd, x_ddd, y_ddd, params_.fixed_yaw,
       &s.yaw, &s.yaw_rate, &s.yaw_accel);
+    // R2-13: the raw atan2 yaw jumps by ±2π at ωt = 3π/4, 5π/4.
+    // Unwrap so the ramp-in blend does not see a spurious discontinuity.
+    s.yaw = continuousFigure8Yaw(wt);
   } else {
     s.yaw = params_.fixed_yaw;
   }

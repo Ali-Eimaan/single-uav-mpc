@@ -26,8 +26,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import warnings
 
 import yaml
+
+# Suppress acados_template deprecation warnings during code generation.
+# The acados 0.6.0 API is used throughout; these are known low-severity warnings.
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 from quadrotor_model import (
     AirframeConstants,
@@ -439,8 +445,8 @@ def main() -> int:
         return 0
 
     ocp = build_ocp(model, constants, config)
-    ocp.code_export_directory = str(output_dir / "c_generated_code")
-    ocp.json_file = str(output_dir / "acados_ocp_quadrotor.json")
+    ocp.code_gen_options.code_export_directory = str(output_dir / "c_generated_code")
+    ocp.code_gen_options.json_file = str(output_dir / "acados_ocp_quadrotor.json")
     _generate(ocp, output_dir, build=True)
     strip_nondeterminism(output_dir)
     write_provenance(output_dir, acados_commit, hash_value, airframe_path, config_path)
@@ -454,12 +460,7 @@ def _generate(ocp, output_dir: Path, build: bool) -> None:
     from acados_template import AcadosOcpSolver
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    # UNVERIFIED: the `json_file` kwarg is deprecated in acados >= 0.5.6 (warning,
-    # still functional); the modern route is `ocp.code_gen_options.json_file`.
-    # If it becomes an error on the pinned acados, move the json_file assignment
-    # into build_ocp()/main() and drop the kwarg here. Not verifiable until
-    # ACADOS_COMMIT is pinned and acados is built.
-    AcadosOcpSolver(ocp, json_file=ocp.json_file, generate=True, build=build)
+    AcadosOcpSolver(ocp, generate=True, build=build)
     shutil.rmtree(output_dir / "build", ignore_errors=True)
     _symlink_hashed_outputs(output_dir / "c_generated_code")
 

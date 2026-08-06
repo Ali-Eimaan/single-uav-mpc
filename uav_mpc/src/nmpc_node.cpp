@@ -128,6 +128,7 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
 
   // --- solver -------------------------------------------------------------------------------
   solver_ = std::make_unique<AcadosWrapper>();
+  solver_config_.hover_thrust_per_rotor = hover_thrust_per_rotor_n_;  // R2-16
   if (!solver_->initialise(solver_config_, &error)) {
     RCLCPP_ERROR(get_logger(), "on_configure: solver initialisation failed: %s", error.c_str());
     return CallbackReturn::FAILURE;
@@ -819,14 +820,9 @@ void NmpcNode::controlLoop()
   } else {
     std::lock_guard<std::mutex> lk(trajectory_mutex_);
     const double t_traj = (now - trajectory_start_time_).seconds();
-    const auto refs = trajectory_->referenceHorizon(
-      t_traj, dt, n, airframe_, AttitudeRep::Quaternion);
-    for (int k = 0; k <= n; ++k) {
-      x_refs_[static_cast<std::size_t>(k)] = refs[k].state;
-    }
-    for (int k = 0; k < n; ++k) {
-      u_refs_[static_cast<std::size_t>(k)] = refs[k].input;
-    }
+    trajectory_->referenceHorizon(
+      t_traj, dt, n, airframe_, AttitudeRep::Quaternion,
+      &x_refs_, &u_refs_);  // R2-14: zero-allocation overload
   }
 
   // --- 5. push into acados + solve ---------------------------------------------------------------

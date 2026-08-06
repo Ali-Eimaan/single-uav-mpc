@@ -118,6 +118,14 @@ public:
   std::vector<StateInputReference> referenceHorizon(
     double t0, double dt, int n_steps, const QuadrotorParams & airframe, AttitudeRep rep) const;
 
+  /// Non-allocating overload: writes into pre-sized caller buffers.
+  /// x_refs must have (n_steps + 1) elements; u_refs must have n_steps elements.
+  /// REVIEW R1-7 · R2-14: zero heap allocation on the hot path.
+  void referenceHorizon(
+    double t0, double dt, int n_steps, const QuadrotorParams & airframe,
+    AttitudeRep rep, std::vector<Eigen::VectorXd> * x_refs,
+    std::vector<Eigen::VectorXd> * u_refs) const;
+
   /// [s] total duration; std::numeric_limits<double>::infinity() for periodic types.
   double duration() const;
 
