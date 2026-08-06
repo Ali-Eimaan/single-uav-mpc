@@ -45,6 +45,12 @@ ACADOS_COMMIT_FILE = HERE / "ACADOS_COMMIT"
 DATE_RE = re.compile(rb"generated on\s+\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}")
 JSON_TIME_STAMP_RE = re.compile(rb'"time_stamp"\s*:\s*"?\d+(\.\d+)?"?')
 GENERATED_ON_RE = re.compile(rb"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}")
+CODE_EXPORT_DIR_RE = re.compile(rb'"code_export_directory"\s*:\s*"[^"]*"')
+JSON_FILE_RE = re.compile(rb'"json_file"\s*:\s*"[^"]*"')
+# acados >= 0.6.0 includes a top-level "hash" that is computed from the OCP
+# configuration (including path-dependent fields); normalise it to a constant
+# after stripping path-dependent strings so two runs are byte-identical.
+HASH_RE = re.compile(rb'"hash"\s*:\s*"[0-9a-fA-F]{32}"')
 
 
 def load_nmpc_config(path: Path) -> dict:
@@ -184,8 +190,9 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
 
     ocp.cost.cost_type = "NONLINEAR_LS"
     ocp.cost.cost_type_e = "NONLINEAR_LS"
-    ocp.cost.y_expr = y_expr
-    ocp.cost.y_expr_e = y_expr_e
+    # acados >= 0.6.0: cost_y_expr lives on model, not cost.
+    ocp.model.cost_y_expr = y_expr
+    ocp.model.cost_y_expr_e = y_expr_e
 
     q_diag = np.array(config["q_diag"], dtype=float)          # 12 entries
     r_diag = np.array(config["r_diag"], dtype=float)          # 4 entries
@@ -197,6 +204,9 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
 
     W = np.diag(np.concatenate([q_diag, r_diag]))             # 16x16
     W_e = np.diag(q_terminal_diag)                            # 12x12
+    # Path stages 0..N-1 (loop is still needed for the per-stage indexing).
+    # acados 0.6.0: copy_path_cost_to_stage_0() sets cost_type_0, y_expr_0,
+    # W_0, yref_0 from the path cost automatically.
     for k in range(ocp.dims.N):
         ocp.cost.W = W
         ocp.cost.yref = np.zeros(ny)
@@ -209,39 +219,49 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
 
     rate_idx = 10 if nx == 13 else 9
     omega_max = 6.0
-    # Soft L2 slack weights for the body-rate bounds.
-    zl = np.zeros(nx)
-    zu = np.zeros(nx)
-    Zl = np.zeros((nx, nx))
-    Zu = np.zeros((nx, nx))
-    zl[rate_idx:rate_idx + 3] = 1e1
-    zu[rate_idx:rate_idx + 3] = 1e1
-    Zl[rate_idx:rate_idx + 3, rate_idx:rate_idx + 3] = 1e2
-    Zu[rate_idx:rate_idx + 3, rate_idx:rate_idx + 3] = 1e2
+    # Soft L2 slack on body-rate bounds.
+    zl_rate = np.ones(3) * 1e1
+    zu_rate = np.ones(3) * 1e1
+    Zl_rate = np.ones(3) * 1e2
+    Zu_rate = np.ones(3) * 1e2
 
-    lbx = np.full(nx, -np.inf)
-    ubx = np.full(nx, np.inf)
-    lbx[rate_idx:rate_idx + 3] = -omega_max
-    ubx[rate_idx:rate_idx + 3] = +omega_max
+    lbx = -omega_max * np.ones(3)
+    ubx = +omega_max * np.ones(3)
+    rate_idxs = np.arange(rate_idx, rate_idx + 3)
 
     for k in range(ocp.dims.N):
+        ocp.constraints.idxbu = np.arange(nu)
         ocp.constraints.lbu = min_thrust * np.ones(nu)
         ocp.constraints.ubu = max_thrust * np.ones(nu)
-        ocp.constraints.idxbu = np.arange(nu)
+        # Body-rate soft bounds only.
+        ocp.constraints.idxbx = rate_idxs
         ocp.constraints.lbx = lbx
         ocp.constraints.ubx = ubx
-        ocp.constraints.lbx_0 = np.zeros(nx)   # x0 equality — overwritten at runtime
-        ocp.constraints.ubx_0 = np.zeros(nx)
-        ocp.cost.zl = zl
-        ocp.cost.zu = zu
-        ocp.cost.Zl = Zl
-        ocp.cost.Zu = Zu
+        ocp.constraints.idxsbx = np.arange(3)
+        ocp.cost.zl = zl_rate
+        ocp.cost.zu = zu_rate
+        ocp.cost.Zl = Zl_rate
+        ocp.cost.Zu = Zu_rate
+    # acados >= 0.6.0: initial stage (nsbx not supported at stage 0).
+    ocp.constraints.idxbx_0 = np.arange(nx)
+    ocp.constraints.lbx_0 = np.zeros(nx)
+    ocp.constraints.ubx_0 = np.zeros(nx)
+    ocp.constraints.idxbu_0 = np.arange(nu)
+    ocp.constraints.lbu_0 = min_thrust * np.ones(nu)
+    ocp.constraints.ubu_0 = max_thrust * np.ones(nu)
+    ocp.constraints.idxsbx_0 = np.array([], dtype=int)
+    ocp.cost.zl_0 = np.zeros(0)
+    ocp.cost.zu_0 = np.zeros(0)
+    ocp.cost.Zl_0 = np.zeros(0)
+    ocp.cost.Zu_0 = np.zeros(0)
+    ocp.constraints.idxbx_e = rate_idxs
     ocp.constraints.lbx_e = lbx
     ocp.constraints.ubx_e = ubx
-    ocp.cost.zl_e = zl
-    ocp.cost.zu_e = zu
-    ocp.cost.Zl_e = Zl
-    ocp.cost.Zu_e = Zu
+    ocp.constraints.idxsbx_e = np.arange(3)
+    ocp.cost.zl_e = zl_rate
+    ocp.cost.zu_e = zu_rate
+    ocp.cost.Zl_e = Zl_rate
+    ocp.cost.Zu_e = Zu_rate
 
     # Default online parameters: zero wind, mass_scale = 1, identity q_ref.
     ocp.parameter_values = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0])
@@ -319,7 +339,17 @@ def strip_nondeterminism(output_dir: Path) -> None:
             new_data, n1 = DATE_RE.subn(b"generated on 1970-01-01 00:00:00", data)
             new_data, n2 = JSON_TIME_STAMP_RE.subn(b'"time_stamp": 0', new_data)
             new_data, n3 = GENERATED_ON_RE.subn(b"1970-01-01 00:00:00", new_data)
-            replaced += n1 + n2 + n3
+            # acados >= 0.5.6 embeds the code_export_directory absolute path in
+            # JSON; normalise it so two runs to different temp dirs are identical.
+            new_data, n4 = CODE_EXPORT_DIR_RE.subn(
+                b'"code_export_directory": "/codegen/c_generated_code"', new_data)
+            new_data, n5 = JSON_FILE_RE.subn(
+                b'"json_file": "/codegen/acados_ocp_quadrotor.json"', new_data)
+            # acados >= 0.6.0 stores a top-level hash that includes
+            # path-dependent fields — re-compute after normalising them.
+            new_data, n6 = HASH_RE.subn(
+                b'"hash": "00000000000000000000000000000000"', new_data)
+            replaced += n1 + n2 + n3 + n4 + n5 + n6
             if new_data != data:
                 path.write_bytes(new_data)
 
@@ -431,6 +461,68 @@ def _generate(ocp, output_dir: Path, build: bool) -> None:
     # ACADOS_COMMIT is pinned and acados is built.
     AcadosOcpSolver(ocp, json_file=ocp.json_file, generate=True, build=build)
     shutil.rmtree(output_dir / "build", ignore_errors=True)
+    _symlink_hashed_outputs(output_dir / "c_generated_code")
+
+
+def _symlink_hashed_outputs(gen_dir: Path) -> None:
+    """Create plain-name symlinks to the hashed generated files.
+
+    acados_template appends a content hash to every generated file (e.g.
+    ``acados_solver_ocp_quadrotor_eefd7658.h``). The consuming C++ code
+    and CMakeLists.txt expect stable names without the hash suffix so they
+    don't need updating every time the model changes.
+    """
+    import glob as _glob
+    import re as _re
+
+    patterns = {
+        "acados_solver_quadrotor": "acados_solver_ocp_quadrotor_*",
+        "libacados_ocp_solver_quadrotor": "libacados_ocp_solver_ocp_quadrotor_*",
+    }
+    hash_str = ""
+    for plain, pattern in patterns.items():
+        for ext in (".h", ".c", ".so"):
+            matches = sorted(_glob.glob(str(gen_dir / (pattern + ext)),
+                                       root_dir=str(gen_dir)))
+            if matches:
+                hashed = gen_dir / matches[0]
+                link = gen_dir / (plain + ext)
+                if link.is_symlink() or link.exists():
+                    link.unlink()
+                link.symlink_to(hashed.name)
+                print(f"  symlink: {link.name} -> {hashed.name}")
+                if not hash_str and ext == ".h":
+                    # Extract hash from e.g. acados_solver_ocp_quadrotor_<hash>.h
+                    m = _re.search(r"ocp_quadrotor_([0-9a-f]+)\.h", hashed.name)
+                    if m:
+                        hash_str = m.group(1)
+
+    # acados >= 0.6.0 uses OCP_<MODEL>_<HASH>_NX etc; older code references
+    # QUADROTOR_NX etc. Provide compatibility aliases.
+    if hash_str:
+        compat_header = gen_dir / "acados_solver_compat.h"
+        suffix = f"OCP_QUADROTOR_{hash_str.upper()}_"
+        compat_header.write_text(f"""\
+// Auto-generated compatibility aliases for acados >= 0.6.0 naming convention.
+// Generated by codegen/generate_acados_solver.py — DO NOT EDIT.
+#ifndef ACADOS_SOLVER_COMPAT_H_
+#define ACADOS_SOLVER_COMPAT_H_
+
+#include "acados_solver_quadrotor.h"
+
+#define QUADROTOR_NX  ({suffix}NX)
+#define QUADROTOR_NU  ({suffix}NU)
+#define QUADROTOR_NP  ({suffix}NP)
+#define QUADROTOR_N   ({suffix}N)
+#define QUADROTOR_TF  (({suffix}N) * 0.05)  /* N * Ts; Ts defaults to 0.05 */
+#define QUADROTOR_NBX ({suffix}NBX)
+#define QUADROTOR_NBU ({suffix}NBU)
+#define QUADROTOR_NY  ({suffix}NY)
+#define QUADROTOR_NYN ({suffix}NYN)
+
+#endif  // ACADOS_SOLVER_COMPAT_H_
+""")
+        print(f"  written: {compat_header.name}")
 
 
 if __name__ == "__main__":

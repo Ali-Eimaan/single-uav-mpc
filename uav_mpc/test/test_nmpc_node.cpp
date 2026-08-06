@@ -47,7 +47,8 @@ std::string x500Path()
 class NmpcNodeTest : public ::testing::Test
 {
 protected:
-  NmpcNodeTest() : node_(rclcpp::NodeOptions()) {}
+  NmpcNodeTest()
+  : node_(rclcpp::NodeOptions()) {}
 
   void SetUp() override
   {

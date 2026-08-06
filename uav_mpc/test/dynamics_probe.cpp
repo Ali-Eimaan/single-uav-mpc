@@ -4,7 +4,7 @@
 // Helper binary for test_acados_codegen.py (§10.3): reads (x, u) rows on stdin, writes the
 // C++ QuadrotorDynamics f(x, u) row on stdout. Doubles as a manual debugging tool:
 //
-//   echo "0 0 1 0 0 0 1 0 0 0 0 0 0 0.5 0.5 0.5 0.5" | ./dynamics_probe /path/to/params/x500_calibration.yaml
+//   echo "0 0 1 ..." | ./dynamics_probe /path/to/params/x500_calibration.yaml
 
 #include <Eigen/Dense>
 #include <iomanip>
@@ -54,8 +54,12 @@ int main(int argc, char ** argv)
     if (!ok) {continue;}
     Eigen::Matrix<double, kNx, 1> x;
     Eigen::Matrix<double, kNu, 1> u;
-    for (int i = 0; i < kNx; ++i) {x(i) = values[i];}
-    for (int i = 0; i < kNu; ++i) {u(i) = values[kNx + i];}
+    for (int i = 0; i < kNx; ++i) {
+      x(i) = values[i];
+    }
+    for (int i = 0; i < kNu; ++i) {
+      u(i) = values[kNx + i];
+    }
     const Eigen::Matrix<double, kNx, 1> xd = dyn.f(x, u);
     for (int i = 0; i < kNx; ++i) {
       if (i > 0) {std::cout << " ";}

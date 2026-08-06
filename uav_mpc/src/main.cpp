@@ -13,12 +13,12 @@
 // VERIFICATION STATUS: syntax-verified against the .deepseek spec, NOT compile-verified —
 // depends on nmpc_node.cpp which is gated on px4_msgs_FOUND (px4_msgs absent here).
 
+#include <sched.h>
+
 #include <cerrno>
 #include <cstring>
 #include <memory>
 #include <string>
-
-#include <sched.h>
 
 #include "rclcpp/rclcpp.hpp"
 #include "uav_mpc/nmpc_node.hpp"

@@ -26,8 +26,8 @@ Eigen::Matrix3d enuToNedMatrix()
 {
   Eigen::Matrix3d P;
   P << 0.0, 1.0, 0.0,
-       1.0, 0.0, 0.0,
-       0.0, 0.0, -1.0;
+    1.0, 0.0, 0.0,
+    0.0, 0.0, -1.0;
   return P;
 }
 
@@ -35,8 +35,8 @@ Eigen::Matrix3d enuToNedMatrix()
 Eigen::Quaterniond randomQuat(std::mt19937 & rng, std::uniform_real_distribution<double> & ang)
 {
   return Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitZ())) *
-    Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitY())) *
-    Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitX()));
+         Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitY())) *
+         Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitX()));
 }
 
 }  // namespace

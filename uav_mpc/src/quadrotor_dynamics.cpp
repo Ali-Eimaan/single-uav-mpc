@@ -30,8 +30,8 @@ Eigen::Matrix<typename Derived::Scalar, 3, 3> skewMatrix(
   const auto & a2 = a(2);
   Eigen::Matrix<typename Derived::Scalar, 3, 3> S;
   S << 0, -a2, a1,
-       a2, 0, -a0,
-       -a1, a0, 0;
+    a2, 0, -a0,
+    -a1, a0, 0;
   return S;
 }
 
@@ -57,13 +57,13 @@ Eigen::Matrix<Scalar, 3, 3> eulerRotationZyx(const Eigen::Matrix<Scalar, 3, 1> &
 std::function<double(const YAML::Node &, const char *)> requireDouble(const std::string & path)
 {
   return [&path](const YAML::Node & node, const char * key) -> double {
-    const YAML::Node n = node[key];
-    if (!n || !n.IsDefined()) {
-      throw std::runtime_error(
+           const YAML::Node n = node[key];
+           if (!n || !n.IsDefined()) {
+             throw std::runtime_error(
         "quadrotor params: missing key 'airframe." + std::string(key) + "' in " + path);
-    }
-    return n.as<double>();
-  };
+           }
+           return n.as<double>();
+         };
 }
 
 }  // namespace
@@ -153,9 +153,9 @@ QuadrotorParams QuadrotorParams::fromYaml(const std::string & yaml_path)
 bool QuadrotorParams::isValid(std::string * why) const
 {
   auto fail = [&why](const std::string & msg) {
-    if (why != nullptr) {*why = msg;}
-    return false;
-  };
+      if (why != nullptr) {*why = msg;}
+      return false;
+    };
 
   if (!(mass > 0.0)) {return fail("mass must be > 0");}
   if (!inertia.isApprox(inertia.transpose())) {return fail("inertia must be symmetric");}
@@ -200,10 +200,10 @@ void QuadrotorDynamics<Scalar, Rep>::buildAllocationMatrix()
   // like "the MPC is unstable".
   const Scalar d = params_.arm_length / std::sqrt(Scalar(2));
   const Scalar c = params_.torque_coeff / params_.thrust_coeff;
-  allocation_ <<  Scalar(1),  Scalar(1),  Scalar(1),  Scalar(1),
-                 -d,  d,  d, -d,
-                 -d,  d, -d,  d,
-                 -c, -c,  c,  c;
+  allocation_ << Scalar(1), Scalar(1), Scalar(1), Scalar(1),
+    -d, d, d, -d,
+    -d, d, -d, d,
+    -c, -c, c, c;
   allocation_inverse_ = allocation_.inverse();
   inertia_inv_ = params_.inertia.template cast<Scalar>().inverse();
 }
@@ -218,10 +218,10 @@ ControlAllocation ControlAllocation::fromParams(const QuadrotorParams & params)
   const double d = params.arm_length / std::sqrt(2.0);
   const double c = params.torque_coeff / params.thrust_coeff;
   Eigen::Matrix4d A;
-  A <<  1,  1,  1,  1,
-       -d,  d,  d, -d,
-       -d,  d, -d,  d,
-       -c, -c,  c,  c;
+  A << 1, 1, 1, 1,
+    -d, d, d, -d,
+    -d, d, -d, d,
+    -c, -c, c, c;
   alloc.inverse = A.inverse();
   alloc.min_thrust_per_rotor = params.min_thrust_per_rotor;
   alloc.max_thrust_per_rotor = params.max_thrust_per_rotor;
@@ -288,8 +288,8 @@ QuadrotorDynamics<Scalar, Rep>::f(const StateVector & x, const InputVector & u) 
     const Scalar st = std::sin(theta), ct = std::cos(theta);
     Eigen::Matrix<Scalar, 3, 3> T;
     T << Scalar(1), sphi * st / ct, cphi * st / ct,
-         Scalar(0), cphi, -sphi,
-         Scalar(0), sphi / ct, cphi / ct;
+      Scalar(0), cphi, -sphi,
+      Scalar(0), sphi / ct, cphi / ct;
     xd.template segment<3>(kAtt) = T * w;
   }
 
@@ -383,9 +383,9 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     // q_dot wrt omega:  0.5 * L(q)[:, 1:4], L(q) the left-multiplication matrix of q.
     Eigen::Matrix<Scalar, 4, 3> dqdw;
     dqdw << -qv(0), -qv(1), -qv(2),
-            qw, -qv(2), qv(1),
-            qv(2), qw, -qv(0),
-            -qv(1), qv(0), qw;
+      qw, -qv(2), qv(1),
+      qv(2), qw, -qv(0),
+      -qv(1), qv(0), qw;
     A->template block<4, 3>(kAtt, kRate) = Scalar(0.5) * dqdw;
   } else {
     // v_dot wrt rpy for the Euler branch. R = Rz Ry Rx, dR = dRz Ry Rx + Rz dRy Rx + Rz Ry dRx.
@@ -429,12 +429,12 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     const Scalar cth2 = cth * cth;
     Eigen::Matrix<Scalar, 3, 3> dT_dphi;
     dT_dphi << 0, cr * sth / cth, -sr * sth / cth,
-               0, -sr, -cr,
-               0, cr / cth, -sr / cth;
+      0, -sr, -cr,
+      0, cr / cth, -sr / cth;
     Eigen::Matrix<Scalar, 3, 3> dT_dtheta;
     dT_dtheta << 0, sr / cth2, cr / cth2,
-                 0, 0, 0,
-                 0, sr * sth / cth2, cr * sth / cth2;
+      0, 0, 0,
+      0, sr * sth / cth2, cr * sth / cth2;
     Eigen::Matrix<Scalar, 3, 3> M;
     M.col(0) = dT_dphi * w;
     M.col(1) = dT_dtheta * w;
@@ -444,8 +444,8 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     // rpy_dot wrt omega: T(rpy).
     Eigen::Matrix<Scalar, 3, 3> T;
     T << Scalar(1), sr * sth / cth, cr * sth / cth,
-         Scalar(0), cr, -sr,
-         Scalar(0), sr / cth, cr / cth;
+      Scalar(0), cr, -sr,
+      Scalar(0), sr / cth, cr / cth;
     A->template block<3, 3>(kAtt, kRate) = T;
   }
 

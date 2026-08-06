@@ -70,6 +70,7 @@ class NmpcNode : public rclcpp_lifecycle::LifecycleNode
 public:
   using StateVec = QuadrotorDynamics<double, AttitudeRep::Quaternion>::StateVector;
   using InputVec = QuadrotorDynamics<double, AttitudeRep::Quaternion>::InputVector;
+
 public:
   explicit NmpcNode(const rclcpp::NodeOptions & options);
   ~NmpcNode() override;
@@ -127,7 +128,8 @@ private:
 
   /// Forward-integrate x0 by the measured sensor+actuator latency using the last applied input,
   /// so the OCP starts from where the vehicle will be when the command lands.
-  StateVec compensateLatency(const StateVec & x0, double latency_s) const;  // REVIEW R1-7: fixed-size
+  StateVec compensateLatency(
+    const StateVec & x0, double latency_s) const;  // REVIEW R1-7: fixed-size
 
   /// u0 [per-rotor thrust, N] -> frame-neutral attitude+thrust command (ENU/FLU). The attitude
   /// is the optimiser's intent at stage 1, which already accounts for the rate dynamics (§7.6).
@@ -175,8 +177,8 @@ private:
 
   rclcpp::Service<uav_mpc::srv::SetTrajectory>::SharedPtr srv_set_trajectory_;
   rclcpp::TimerBase::SharedPtr control_timer_;
-  rclcpp::CallbackGroup::SharedPtr control_callback_group_;   ///< MutuallyExclusive, real-time
-  rclcpp::CallbackGroup::SharedPtr telemetry_callback_group_; ///< Reentrant, best-effort
+  rclcpp::CallbackGroup::SharedPtr control_callback_group_;  ///< MutuallyExclusive, real-time
+  rclcpp::CallbackGroup::SharedPtr telemetry_callback_group_;  ///< Reentrant, best-effort
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
   // --- owned components ------------------------------------------------------------------------
@@ -206,11 +208,14 @@ private:
   rclcpp::Time last_tick_time_{0, 0, RCL_ROS_TIME};
   InputVec last_applied_input_{InputVec::Zero()};
   StateVec last_x0_{StateVec::Zero()};      ///< last assembled state, for failsafe resetToHover
-  Eigen::Quaterniond last_q_d_enu_{Eigen::Quaterniond::Identity()};  ///< last sent setpoint attitude
-  StateVec x0_scratch_{StateVec::Zero()};  ///< pre-sized scratch (no alloc in loop)  REVIEW R1-7
+  Eigen::Quaterniond last_q_d_enu_{
+    Eigen::Quaterniond::Identity()};  ///< last sent setpoint attitude
+  // pre-sized scratch (no alloc in loop)  REVIEW R1-7
+  StateVec x0_scratch_{StateVec::Zero()};
   int offboard_stream_counter_{0};
   int consecutive_solver_failures_{0};
-  double hover_thrust_per_rotor_n_{0.0};  ///< [N] per-rotor hover thrust, m*g/4 — solver seed + takeoff ref
+  /// [N] per-rotor hover thrust, m*g/4 -- solver seed + takeoff ref
+  double hover_thrust_per_rotor_n_{0.0};
 
   // --- reference buffers (pre-sized in on_configure; NO allocation inside the control loop) -----
   std::vector<Eigen::VectorXd> x_refs_;   ///< N+1 states

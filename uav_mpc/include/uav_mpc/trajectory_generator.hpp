@@ -66,9 +66,9 @@ struct TrajectoryParams
   double fixed_yaw{0.0};        ///< [rad] used when yaw_follows_velocity == false
   double ramp_in_time{3.0};     ///< [s] cosine blend from hover into the periodic orbit
   std::vector<Eigen::Vector3d> waypoints{};
-  std::vector<double> segment_times{};  ///< empty => allocate by the heuristic in §5.4
+  std::vector<double> segment_times{};   ///< empty => allocate by the heuristic in §5.4
   double max_velocity{5.0};     ///< [m/s] used for time allocation + feasibility check
-  double max_acceleration{8.0}; ///< [m/s^2]
+  double max_acceleration{8.0};  ///< [m/s^2]
 };
 
 /// One minimum-snap segment: a 7th-order polynomial per axis on a normalised [0, 1] domain.
@@ -123,7 +123,9 @@ public:
 
   /// True if every sampled point respects max_velocity / max_acceleration and the thrust
   /// envelope of `airframe`. Called once after generate(); logged as a warning, not fatal.
-  bool isDynamicallyFeasible(const QuadrotorParams & airframe, std::string * report = nullptr) const;
+  bool isDynamicallyFeasible(
+    const QuadrotorParams & airframe,
+    std::string * report = nullptr) const;
 
   /// C^4 continuity check across all segment boundaries; used by
   /// test/test_trajectory_continuity.cpp.

@@ -27,7 +27,8 @@ namespace
 {
 
 /// pi and 2*pi; M_PI is not guaranteed with -std=c++17 -Wpedantic.
-constexpr double kPi = 3.141592653589793238462643383279502884;  // std::numbers::pi (C++20) unavailable
+// std::numbers::pi (C++20) unavailable
+constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kTwoPi = 2.0 * kPi;
 
 /// Falling factorial k!/(k-d)! = k*(k-1)*...*(k-d+1); 1 for d == 0.
@@ -77,11 +78,11 @@ AxisDerivs quotientRule(const AxisDerivs & n, const AxisDerivs & d)
   f.f2 = (n.f2 - (binom(2, 1) * d.f1 * f.f1 + binom(2, 2) * d.f2 * f.f0)) / d.f0;
   f.f3 = (n.f3 -
     (binom(3, 1) * d.f1 * f.f2 + binom(3, 2) * d.f2 * f.f1 +
-      binom(3, 3) * d.f3 * f.f0)) /
+    binom(3, 3) * d.f3 * f.f0)) /
     d.f0;
   f.f4 = (n.f4 -
     (binom(4, 1) * d.f1 * f.f3 + binom(4, 2) * d.f2 * f.f2 +
-      binom(4, 3) * d.f3 * f.f1 + binom(4, 4) * d.f4 * f.f0)) /
+    binom(4, 3) * d.f3 * f.f1 + binom(4, 4) * d.f4 * f.f0)) /
     d.f0;
   return f;
 }
@@ -208,22 +209,22 @@ FlatState TrajectoryGenerator::sample(double t) const
       traj = sampleStep(t);
       break;
     case TrajectoryType::Waypoints: {
-      double total = duration();
-      double tc = std::min(std::max(t, 0.0), total);
-      double acc = 0.0;
-      for (std::size_t i = 0; i < segments_.size(); ++i) {
-        const double seg_end = acc + segments_[i].duration;
-        if (tc <= seg_end || i + 1 == segments_.size()) {
-          const double tau = (tc - acc) / segments_[i].duration;
-          FlatState s = evaluateSegment(i, tau);
-          s.t = t;
-          return s;
+        double total = duration();
+        double tc = std::min(std::max(t, 0.0), total);
+        double acc = 0.0;
+        for (std::size_t i = 0; i < segments_.size(); ++i) {
+          const double seg_end = acc + segments_[i].duration;
+          if (tc <= seg_end || i + 1 == segments_.size()) {
+            const double tau = (tc - acc) / segments_[i].duration;
+            FlatState s = evaluateSegment(i, tau);
+            s.t = t;
+            return s;
+          }
+          acc = seg_end;
         }
-        acc = seg_end;
-      }
       // unreachable: at least one segment exists for Waypoints
-      return FlatState{};
-    }
+        return FlatState{};
+      }
   }
 
   // C^4 ramp-in from hover: only the orbit types blend, so a step-jump at t = 0 does not
@@ -277,7 +278,7 @@ StateInputReference TrajectoryGenerator::flatToStateInput(
     // commanded yaw, zero the rates and set T = 0 (§5.5). Logged once.
     static std::once_flag flag;
     std::call_once(flag, []() {
-      std::fprintf(
+        std::fprintf(
         stderr,
         "[trajectory_generator] WARN: flatness map degenerate (||a + g e_z|| < 1e-3); "
         "holding level attitude, T = 0\n");
@@ -461,7 +462,8 @@ bool TrajectoryGenerator::isDynamicallyFeasible(
     max_speed = std::max(max_speed, speed);
     max_accel = std::max(max_accel, accel);
     // Required collective thrust, per rotor (ignoring the torque trim).
-    const double per_rotor = airframe.mass * (s.acceleration + Eigen::Vector3d(0.0, 0.0, airframe.gravity)).norm() / 4.0;
+    const double per_rotor = airframe.mass * (s.acceleration + Eigen::Vector3d(0.0, 0.0,
+        airframe.gravity)).norm() / 4.0;
     max_thrust_per_rotor = std::max(max_thrust_per_rotor, per_rotor);
   }
 
@@ -604,16 +606,24 @@ FlatState TrajectoryGenerator::sampleLemniscate(double t) const
   const double z_ddd = -params_.amplitude_z * w * w * w * cos_wt;
   const double z_dddd = params_.amplitude_z * w * w * w * w * sin_wt;
 
+  // The quotient-rule derivatives are with respect to the phase wt = w * t, not t.
+  // Chain rule: d^k/dt^k = w^k * d^k/d(wt)^k.
+  const double w1 = w;
+  const double w2 = w * w;
+  const double w3 = w2 * w;
+  const double w4 = w3 * w;
+
   FlatState s;
   s.position = params_.center + Eigen::Vector3d(fx.f0, fy.f0, z);
-  s.velocity = Eigen::Vector3d(fx.f1, fy.f1, z_d);
-  s.acceleration = Eigen::Vector3d(fx.f2, fy.f2, z_dd);
-  s.jerk = Eigen::Vector3d(fx.f3, fy.f3, z_ddd);
-  s.snap = Eigen::Vector3d(fx.f4, fy.f4, z_dddd);
+  s.velocity = Eigen::Vector3d(fx.f1 * w1, fy.f1 * w1, z_d);
+  s.acceleration = Eigen::Vector3d(fx.f2 * w2, fy.f2 * w2, z_dd);
+  s.jerk = Eigen::Vector3d(fx.f3 * w3, fy.f3 * w3, z_ddd);
+  s.snap = Eigen::Vector3d(fx.f4 * w4, fy.f4 * w4, z_dddd);
   s.t = t;
 
   if (params_.yaw_follows_velocity) {
-    yawFromVelocity(fx.f1, fy.f1, fx.f2, fy.f2, fx.f3, fy.f3, params_.fixed_yaw,
+    yawFromVelocity(fx.f1 * w1, fy.f1 * w1, fx.f2 * w2, fy.f2 * w2,
+      fx.f3 * w3, fy.f3 * w3, params_.fixed_yaw,
       &s.yaw, &s.yaw_rate, &s.yaw_accel);
   } else {
     s.yaw = params_.fixed_yaw;
@@ -676,7 +686,8 @@ FlatState TrajectoryGenerator::sampleStep(double t) const
   // The step target; the C^4 smoothing happens in sample() via the ramp blend.
   FlatState s;
   s.position = params_.center +
-    Eigen::Vector3d(params_.amplitude_x, params_.amplitude_y, params_.altitude + params_.amplitude_z);
+    Eigen::Vector3d(params_.amplitude_x, params_.amplitude_y,
+      params_.altitude + params_.amplitude_z);
   s.yaw = params_.fixed_yaw;
   s.t = t;
   return s;
@@ -734,24 +745,24 @@ void TrajectoryGenerator::buildMinimumSnap()
   };
   std::vector<Row> rows;
   auto addPos = [&](int seg, double tau, int wp_index) {
-    Row r;
-    r.vec = Eigen::RowVectorXd::Zero(n_coeff);
-    double tau_k = 1.0;
-    for (int k = 0; k <= kOrder; ++k) {
-      r.vec[seg * (kOrder + 1) + k] = tau_k;
-      tau_k *= tau;
-    }
-    r.wp_index = wp_index;
-    rows.push_back(std::move(r));
-  };
+      Row r;
+      r.vec = Eigen::RowVectorXd::Zero(n_coeff);
+      double tau_k = 1.0;
+      for (int k = 0; k <= kOrder; ++k) {
+        r.vec[seg * (kOrder + 1) + k] = tau_k;
+        tau_k *= tau;
+      }
+      r.wp_index = wp_index;
+      rows.push_back(std::move(r));
+    };
   auto addDerivRow = [&](int seg, double tau, int d) {
-    Row r;
-    r.vec = Eigen::RowVectorXd::Zero(n_coeff);
-    for (int k = d; k <= kOrder; ++k) {
-      r.vec[seg * (kOrder + 1) + k] = fallingFactorial(k, d) * std::pow(tau, k - d);
-    }
-    rows.push_back(std::move(r));
-  };
+      Row r;
+      r.vec = Eigen::RowVectorXd::Zero(n_coeff);
+      for (int k = d; k <= kOrder; ++k) {
+        r.vec[seg * (kOrder + 1) + k] = fallingFactorial(k, d) * std::pow(tau, k - d);
+      }
+      rows.push_back(std::move(r));
+    };
 
   // w_0 at the start of segment 0, w_M at the end of segment M-1, and every interior
   // waypoint pinned by both neighbouring segments.
@@ -762,16 +773,27 @@ void TrajectoryGenerator::buildMinimumSnap()
   }
   addPos(M - 1, 1.0, M);
 
-  // C^4 continuity at every interior boundary:
-  //   d^k/dtau^k(seg i-1 @ tau=1) - d^k/dtau^k(seg i @ tau=0) = 0.
+  // C^4 continuity at every interior boundary in REAL time:
+  //   (1/T_left^d) * d^d/dtau^d(seg i-1 @ tau=1) -
+  //   (1/T_right^d) * d^d/dtau^d(seg i @ tau=0) = 0.
+  // The chain rule d^d/dt^d = (1/T^d) * d^d/dtau^d is essential because
+  // evaluateSegment (and maxDerivativeJump) compute real-time derivatives.
+  // At tau = 1 all coefficients k >= d survive; at tau = 0 only the k == d
+  // term survives because tau^(k-d) = 0 for k > d.
   for (int i = 1; i < M; ++i) {
     for (int d = 1; d <= 4; ++d) {
+      const double scale_left =
+        1.0 / std::pow(times[static_cast<std::size_t>(i - 1)], d);
+      const double scale_right =
+        1.0 / std::pow(times[static_cast<std::size_t>(i)], d);
       Row r;
       r.vec = Eigen::RowVectorXd::Zero(n_coeff);
       for (int k = d; k <= kOrder; ++k) {
-        r.vec[(i - 1) * (kOrder + 1) + k] += fallingFactorial(k, d);  // tau = 1
-        r.vec[i * (kOrder + 1) + k] -= fallingFactorial(k, d);        // tau = 0: only k == d
+        r.vec[(i - 1) * (kOrder + 1) + k] +=
+          fallingFactorial(k, d) * scale_left;             // tau = 1, real-time
       }
+      r.vec[i * (kOrder + 1) + d] -=
+        fallingFactorial(d, d) * scale_right;              // tau = 0, real-time
       rows.push_back(std::move(r));
     }
   }
@@ -808,16 +830,13 @@ void TrajectoryGenerator::buildMinimumSnap()
     }
   }
 
-  Eigen::MatrixXd sol;
-  Eigen::LDLT<Eigen::MatrixXd> ldlt(KKT);
-  if (ldlt.info() == Eigen::Success) {
-    sol = ldlt.solve(rhs).topRows(n_coeff);
-  } else {
-    // Singular / near-singular factorisation: fall back to the dense LU and log it (§5.3).
-    std::fprintf(
-      stderr, "[trajectory_generator] WARN: LDLT failed, falling back to FullPivLU\n");
-    sol = KKT.fullPivLu().solve(rhs).topRows(n_coeff);
-  }
+  // The KKT system can be ill-conditioned for short segment durations: each
+  // block of Q is scaled by 1/T^7, and T varying across segments (e.g. 0.424 s
+  // vs 0.6 s gives a 100× ratio).  ColPivHouseholderQR handles the near-singular
+  // system; the segment-time floor (0.5 s) keeps T^7 within one order of
+  // magnitude so the KKT is solvable in double precision (§5.3).
+  Eigen::MatrixXd sol =
+    KKT.colPivHouseholderQr().solve(rhs).topRows(n_coeff);
 
   // --- store the segments ---------------------------------------------------------------
   segments_.clear();
@@ -834,14 +853,16 @@ void TrajectoryGenerator::buildMinimumSnap()
 
 std::vector<double> TrajectoryGenerator::allocateSegmentTimes() const
 {
-  // T_i = 1.2 * max(d_i/v_max, sqrt(2 d_i / a_max)), floored at 0.1 s (§5.4).
+  // T_i = 1.2 * max(d_i/v_max, sqrt(2 d_i / a_max)), floored at 0.5 s (§5.4).
+  // The floor keeps T_i^7 within one order of magnitude across segments so
+  // the KKT system is solvable in double precision.
   std::vector<double> times;
   const auto & wp = params_.waypoints;
   for (std::size_t i = 0; i + 1 < wp.size(); ++i) {
     const double d = (wp[i + 1] - wp[i]).norm();
     const double t_vel = d / params_.max_velocity;
     const double t_acc = std::sqrt(2.0 * d / params_.max_acceleration);
-    times.push_back(std::max(1.2 * std::max(t_vel, t_acc), 0.1));
+    times.push_back(std::max(1.2 * std::max(t_vel, t_acc), 0.5));
   }
   return times;
 }

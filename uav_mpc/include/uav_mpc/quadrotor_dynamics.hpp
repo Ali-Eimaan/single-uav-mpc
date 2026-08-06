@@ -33,8 +33,10 @@ struct QuadrotorParams
   double arm_length{0.0};                       ///< [m] motor axis to CoG, in-plane
   double thrust_coeff{0.0};                     ///< [N/(rad/s)^2] k_f, T_i = k_f * omega_i^2
   double torque_coeff{0.0};                     ///< [N m/(rad/s)^2] k_m, yaw drag torque
-  double rotor_time_constant{0.0};              ///< [s] first-order motor lag (used for one-step lag comp)
-  Eigen::Vector3d drag_coeff{Eigen::Vector3d::Zero()};  ///< [N s/m] linear body-frame rotor drag
+  /// [s] first-order motor lag (used for one-step lag comp)
+  double rotor_time_constant{0.0};
+  /// [N s/m] linear body-frame rotor drag
+  Eigen::Vector3d drag_coeff{Eigen::Vector3d::Zero()};
   double gravity{9.80665};                      ///< [m/s^2]
   double max_thrust_per_rotor{0.0};             ///< [N] saturation, single rotor
   double min_thrust_per_rotor{0.0};             ///< [N] usually > 0 to keep rotors spinning
@@ -114,7 +116,9 @@ public:
 
   /// Control allocation: individual rotor thrusts -> (collective thrust [N], body torque [N m]).
   /// Layout is the PX4 "quad X" convention; see the mixer table in the guide (§4.3).
-  void allocate(const InputVector & u, Scalar * collective_thrust, Eigen::Matrix<Scalar, 3, 1> * torque)
+  void allocate(
+    const InputVector & u, Scalar * collective_thrust,
+    Eigen::Matrix<Scalar, 3, 1> * torque)
   const;
 
   /// Inverse allocation, clamped to [min_thrust_per_rotor, max_thrust_per_rotor].
@@ -154,7 +158,8 @@ struct ControlAllocation
 
   /// Inverse allocation, clamped to [min_thrust_per_rotor, max_thrust_per_rotor].
   /// Returns false if the request was infeasible and had to be clamped.
-  bool allocateInverse(double collective_thrust, const Eigen::Vector3d & torque,
+  bool allocateInverse(
+    double collective_thrust, const Eigen::Vector3d & torque,
     Eigen::Vector4d * u) const;
 };
 

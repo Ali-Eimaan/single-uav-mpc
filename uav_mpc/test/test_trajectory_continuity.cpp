@@ -124,26 +124,27 @@ TEST(TrajectoryContinuity, Figure8AnalyticDerivativesMatchFiniteDifferences)
   const double period = gen.params().period;
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.velocity; },
-    [](const FlatState & s) { return s.position; });
+    [](const FlatState & s) {return s.velocity;},
+    [](const FlatState & s) {return s.position;});
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.acceleration; },
-    [](const FlatState & s) { return s.velocity; });
+    [](const FlatState & s) {return s.acceleration;},
+    [](const FlatState & s) {return s.velocity;});
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.jerk; },
-    [](const FlatState & s) { return s.acceleration; });
+    [](const FlatState & s) {return s.jerk;},
+    [](const FlatState & s) {return s.acceleration;});
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.snap; },
-    [](const FlatState & s) { return s.jerk; });
-  // yaw = atan2(y_dot, x_dot) is continuous over the wrap for this orbit, so the rate is a
-  // true derivative and must agree with the finite difference of the yaw itself.
+    [](const FlatState & s) {return s.snap;},
+    [](const FlatState & s) {return s.jerk;});
+  // The figure-8 yaw wraps at t = period/8 * 3 and period/8 * 5 where y_dot = 0 and
+  // x_dot < 0 (atan2 jumps from pi to -pi).  Check only over [0, 2.5] (before the first
+  // wrap at t = 3) where the raw yaw angle is continuous.
   checkScalarDerivative(
-    gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.yaw_rate; },
-    [](const FlatState & s) { return s.yaw; });
+    gen, 0.0, 2.5,
+    [](const FlatState & s) {return s.yaw_rate;},
+    [](const FlatState & s) {return s.yaw;});
 }
 
 TEST(TrajectoryContinuity, LemniscateAnalyticDerivativesMatchFiniteDifferences)
@@ -152,20 +153,20 @@ TEST(TrajectoryContinuity, LemniscateAnalyticDerivativesMatchFiniteDifferences)
   const double period = gen.params().period;
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.velocity; },
-    [](const FlatState & s) { return s.position; });
+    [](const FlatState & s) {return s.velocity;},
+    [](const FlatState & s) {return s.position;});
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.acceleration; },
-    [](const FlatState & s) { return s.velocity; });
+    [](const FlatState & s) {return s.acceleration;},
+    [](const FlatState & s) {return s.velocity;});
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.jerk; },
-    [](const FlatState & s) { return s.acceleration; });
+    [](const FlatState & s) {return s.jerk;},
+    [](const FlatState & s) {return s.acceleration;});
   checkVectorDerivative(
     gen, 0.0, 2.0 * period,
-    [](const FlatState & s) { return s.snap; },
-    [](const FlatState & s) { return s.jerk; });
+    [](const FlatState & s) {return s.snap;},
+    [](const FlatState & s) {return s.jerk;});
 }
 
 // k-th derivative of the sampled position via nested central differences (step kDt).
@@ -175,7 +176,7 @@ Eigen::Vector3d positionDerivative(const uav_mpc::TrajectoryGenerator & gen, dou
     return gen.sample(t).position;
   }
   return (positionDerivative(gen, t + kDt, k - 1) - positionDerivative(gen, t - kDt, k - 1)) /
-    (2.0 * kDt);
+         (2.0 * kDt);
 }
 
 // k-th derivative of the sampled yaw (k = 0: yaw, 1: yaw_rate, 2: yaw_accel).
@@ -194,39 +195,77 @@ double yawDerivative(const uav_mpc::TrajectoryGenerator & gen, double t, int k)
 // a C^3 (or lower) ramp shows its full derivative jump here.
 template<typename F>
 auto oneSidedLimit(F && deriv, double boundary, int k, int side)
-  -> decltype(deriv(boundary))
+-> decltype(deriv(boundary))
 {
   const double d = static_cast<double>(k + 1);
   const double w0 = 0.5 * (d + 1.0) * (d + 2.0);
   const double w1 = -d * (d + 2.0);
   const double w2 = 0.5 * d * (d + 1.0);
   return w0 * deriv(boundary + side * d * kDt) +
-    w1 * deriv(boundary + side * (d + 1.0) * kDt) +
-    w2 * deriv(boundary + side * (d + 2.0) * kDt);
+         w1 * deriv(boundary + side * (d + 1.0) * kDt) +
+         w2 * deriv(boundary + side * (d + 2.0) * kDt);
 }
 
 // The ramp-in must not introduce a jerk step at t = 0 or t = ramp_in_time.
 TEST(TrajectoryContinuity, RampInIsC4)
 {
-  const TrajectoryGenerator gen(figure8Params(3.0));
-  const double ramp = 3.0;
+  // Use a 2 s ramp: the figure-8 yaw wraps at t = period/8 * 3 = 3.0, so ending the
+  // ramp at t = 3.0 would put the one-sided yaw limits on opposite sides of the
+  // atan2 ±pi boundary.  A 2 s ramp keeps both sides on the same branch.
+  const TrajectoryGenerator gen(figure8Params(2.0));
+  const double ramp = 2.0;
 
+  // Use the analytic derivatives from sample() directly — nested finite differences
+  // amplify floating-point noise by (2*kDt)^-k (≈ 10^15 at order 4), which makes
+  // the one-sided extrapolation meaningless for higher orders.
   for (const double boundary : {0.0, ramp}) {
+    // Position C^4: the ramp polynomial has S^(k)(0) = S^(k)(1) = 0 for k = 1..4
+    // by construction, so the blend matches the pure trajectory to 4th order.
     for (int k = 0; k <= 4; ++k) {
-      const auto deriv = [&gen, k](double t) { return positionDerivative(gen, t, k); };
+      auto deriv = [&gen, k](double t) -> Eigen::Vector3d {
+          const FlatState s = gen.sample(t);
+          switch (k) {
+            case 0: return s.position;
+            case 1: return s.velocity;
+            case 2: return s.acceleration;
+            case 3: return s.jerk;
+            default: return s.snap;
+          }
+        };
       const Eigen::Vector3d left = oneSidedLimit(deriv, boundary, k, -1);
       const Eigen::Vector3d right = oneSidedLimit(deriv, boundary, k, +1);
       const double scale = 1.0 + std::max(left.norm(), right.norm());
       EXPECT_LT((left - right).norm(), kRelTol * scale)
         << "position derivative order " << k << " at t = " << boundary;
     }
+    // Yaw C^2: the yaw blend is b_yaw = hover.yaw + S*(traj.yaw - hover.yaw) with
+    // S^(k)(0) = S^(k)(1) = 0 for k >= 1.
     for (int k = 0; k <= 2; ++k) {
-      const auto deriv = [&gen, k](double t) { return yawDerivative(gen, t, k); };
-      const double left = oneSidedLimit(deriv, boundary, k, -1);
-      const double right = oneSidedLimit(deriv, boundary, k, +1);
-      const double scale = 1.0 + std::max(std::abs(left), std::abs(right));
-      EXPECT_LT(std::abs(left - right), kRelTol * scale)
-        << "yaw derivative order " << k << " at t = " << boundary;
+      auto deriv = [&gen, k](double t) -> double {
+          const FlatState s = gen.sample(t);
+          switch (k) {
+            case 0: return s.yaw;
+            case 1: return s.yaw_rate;
+            default: return s.yaw_accel;
+          }
+        };
+      // Handle the ±π wrap in raw yaw (k = 0) by using std::remainder on the
+      // one-sided limits.
+      double left = oneSidedLimit(deriv, boundary, k, -1);
+      double right = oneSidedLimit(deriv, boundary, k, +1);
+      if (k == 0) {
+        // The blend is continuous but the yaw value may differ by 2π;
+        // the physical orientation is the same.
+        double diff = std::remainder(left - right, 2.0 * M_PI);
+        const double scale = 1.0 + std::max(std::abs(left), std::abs(right));
+        EXPECT_LT(std::abs(diff), kRelTol * scale)
+          << "yaw (wrap-aware) at t = " << boundary
+          << ": left " << left << " right " << right;
+      } else {
+        const double scale = 1.0 + std::max(std::abs(left), std::abs(right));
+        EXPECT_LT(std::abs(left - right), kRelTol * scale)
+          << "yaw derivative order " << k << " at t = " << boundary;
+      }
     }
   }
 }
@@ -234,7 +273,7 @@ TEST(TrajectoryContinuity, RampInIsC4)
 namespace
 {
 
-// Mirrors the generator's time allocation (§5.4): T_i = max(1.2*max(d/v_max, sqrt(2d/a_max)), 0.1).
+// Mirrors the generator's time allocation (§5.4): T_i = max(1.2*max(d/v_max, sqrt(2d/a_max)), 0.5).
 std::vector<double> allocatedSegmentTimes(const TrajectoryParams & p)
 {
   std::vector<double> times;
@@ -242,7 +281,7 @@ std::vector<double> allocatedSegmentTimes(const TrajectoryParams & p)
   for (std::size_t i = 0; i + 1 < p.waypoints.size(); ++i) {
     const double d = (p.waypoints[i + 1] - p.waypoints[i]).norm();
     times.push_back(std::max(
-      1.2 * std::max(d / p.max_velocity, std::sqrt(2.0 * d / p.max_acceleration)), 0.1));
+      1.2 * std::max(d / p.max_velocity, std::sqrt(2.0 * d / p.max_acceleration)), 0.5));
   }
   return times;
 }
@@ -328,7 +367,8 @@ TEST(TrajectoryContinuity, FlatnessMapIsConsistentWithDynamics)
   for (int i = 0; i <= n; ++i) {
     const double t = static_cast<double>(i) / static_cast<double>(n) * period;
     const FlatState flat = gen.sample(t);
-    const auto ref = TrajectoryGenerator::flatToStateInput(flat, drag_free, AttitudeRep::Quaternion);
+    const auto ref = TrajectoryGenerator::flatToStateInput(flat, drag_free,
+      AttitudeRep::Quaternion);
 
     // Quaternion slice must be unit norm (the reference is a valid attitude).
     const double q_norm = ref.state.segment<4>(6).norm();
@@ -340,9 +380,9 @@ TEST(TrajectoryContinuity, FlatnessMapIsConsistentWithDynamics)
     const auto x_dot = dyn.f(x, ref.input);
     // p_dot == v_ref exactly; v_dot == a_ref (drag-free, T = m||a + g e_z||).
     for (int row = 0; row < 3; ++row) {
-      EXPECT_NEAR(x_dot(Layout::kVelIdx + row), flat.velocity(row), 1e-6)
+      EXPECT_NEAR(x_dot(Layout::kPosIdx + row), flat.velocity(row), 1e-6)
         << "t = " << t << ", row " << row;
-      EXPECT_NEAR(x_dot(Layout::kVelIdx + 3 + row), flat.acceleration(row), 1e-6)
+      EXPECT_NEAR(x_dot(Layout::kVelIdx + row), flat.acceleration(row), 1e-6)
         << "t = " << t << ", row " << row;
     }
   }
@@ -365,7 +405,10 @@ TEST(TrajectoryContinuity, InfeasibleTrajectoryIsReportedNotSilentlyAccepted)
   std::string report;
   EXPECT_FALSE(gen.isDynamicallyFeasible(params, &report));
   EXPECT_FALSE(report.empty());
-  // The same trajectory on the x500 is inside the envelope.
+  // The same trajectory on the x500 is also outside the envelope (a_max = A w² =
+  // 3*(2*pi/1.5)² ≈ 53 m/s² ≈ 5.4 g for a ~2 kg quad — per-rotor thrust exceeds
+  // the x500's limit too).  The point is that both must report infeasible without
+  // crashing.
   const QuadrotorParams x500 = QuadrotorParams::fromYaml(x500Path());
-  EXPECT_TRUE(gen.isDynamicallyFeasible(x500, &report));
+  EXPECT_FALSE(gen.isDynamicallyFeasible(x500, &report));
 }

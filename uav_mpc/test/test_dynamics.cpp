@@ -54,7 +54,9 @@ typename QuadrotorDynamics<double, Rep>::StateVector randomState(std::mt19937 & 
       Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitY())) *
       Eigen::Quaterniond(Eigen::AngleAxisd(ang(rng), Eigen::Vector3d::UnitX()));
     x.template segment<4>(6) << q.w(), q.x(), q.y(), q.z();
-    for (int i = 0; i < 3; ++i) {x(10 + i) = rate(rng);}
+    for (int i = 0; i < 3; ++i) {
+      x(10 + i) = rate(rng);
+    }
   } else {
     for (int i = 0; i < 3; ++i) {
       x(6 + i) = ang(rng);
@@ -115,7 +117,9 @@ void checkJacobiansOnce(std::mt19937 & rng)
 
   std::uniform_real_distribution<double> thrust(0.5, 5.0);
   UV u;
-  for (int i = 0; i < Nu; ++i) {u(i) = thrust(rng);}
+  for (int i = 0; i < Nu; ++i) {
+    u(i) = thrust(rng);
+  }
 
   const SV x = randomState<Rep>(rng);
 
@@ -146,13 +150,17 @@ void checkJacobiansOnce(std::mt19937 & rng)
 TEST(DynamicsJacobians, QuaternionRepMatchesFiniteDifferences)
 {
   std::mt19937 rng(101);
-  for (int trial = 0; trial < 10; ++trial) {checkJacobiansOnce<AttitudeRep::Quaternion>(rng);}
+  for (int trial = 0; trial < 10; ++trial) {
+    checkJacobiansOnce<AttitudeRep::Quaternion>(rng);
+                                                                                             }
 }
 
 TEST(DynamicsJacobians, EulerRepMatchesFiniteDifferences)
 {
   std::mt19937 rng(202);
-  for (int trial = 0; trial < 10; ++trial) {checkJacobiansOnce<AttitudeRep::Euler>(rng);}
+  for (int trial = 0; trial < 10; ++trial) {
+    checkJacobiansOnce<AttitudeRep::Euler>(rng);
+                                                                                        }
 }
 
 /// REVIEW R1-2 regression: the analytic dRy/d(theta) once used cos(roll) where cos(pitch)
@@ -262,7 +270,9 @@ TEST(DynamicsStep, QuaternionNormPreserved)
   for (int trial = 0; trial < 20; ++trial) {
     auto x = randomState<AttitudeRep::Quaternion>(rng);
     Eigen::Matrix<double, 4, 1> u;
-    for (int i = 0; i < 4; ++i) {u(i) = thrust(rng);}
+    for (int i = 0; i < 4; ++i) {
+      u(i) = thrust(rng);
+    }
     for (int k = 0; k < 50; ++k) {
       x = dyn.step(x, u, 0.01);
     }

@@ -12,15 +12,16 @@
 
 #include "uav_mpc/nmpc_node.hpp"
 
+#include <yaml-cpp/yaml.h>
+
 #include <algorithm>
 #include <chrono>
+
 #include <cmath>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <yaml-cpp/yaml.h>
 
 #include "rclcpp_components/register_node_macro.hpp"
 #include "uav_mpc/msg/solver_diagnostics.hpp"
@@ -316,7 +317,7 @@ void NmpcNode::declareParameters()
 
   // --- solver behaviour ----------------------------------------------------------------------
   declare_parameter("max_sqp_iterations", 1,
-    descriptor("SQP-RTI iterations (codegen)" , true));
+    descriptor("SQP-RTI iterations (codegen)", true));
   declare_parameter("solve_time_budget_ms", 5.0,
     descriptor("wall-clock solve budget [ms]; exceeded => Timeout", false, 0.1, 100.0, true));
   declare_parameter("max_consecutive_failures", 5,
@@ -352,7 +353,8 @@ void NmpcNode::declareParameters()
   declare_parameter("landing_speed_mps", 0.3,
     descriptor("vertical descent rate during landing [m/s]", false, 0.05, 2.0, true));
   declare_parameter("max_jump_on_switch_m", 1.0,
-    descriptor("max distance between the vehicle and a new trajectory's start", false, 0.0, 10.0, true));
+    descriptor("max distance between the vehicle and a new trajectory's start", false, 0.0, 10.0,
+      true));
   declare_parameter("publish_visualisation", true,
     descriptor("publish ~/predicted_path and ~/reference_path for RViz"));
   declare_parameter("status_publish_rate_hz", 100.0,
@@ -399,9 +401,11 @@ bool NmpcNode::loadParameters(std::string * error)
   // --- solver config -------------------------------------------------------------------------
   solver_config_.horizon_steps = static_cast<int>(get_parameter("horizon_steps").as_int());
   solver_config_.horizon_time = get_parameter("horizon_time").as_double();
-  solver_config_.max_sqp_iterations = static_cast<int>(get_parameter("max_sqp_iterations").as_int());
+  solver_config_.max_sqp_iterations =
+    static_cast<int>(get_parameter("max_sqp_iterations").as_int());
   solver_config_.solve_time_budget_ms = get_parameter("solve_time_budget_ms").as_double();
-  solver_config_.max_consecutive_failures = static_cast<int>(get_parameter("max_consecutive_failures").as_int());
+  solver_config_.max_consecutive_failures =
+    static_cast<int>(get_parameter("max_consecutive_failures").as_int());
   solver_config_.warm_start = get_parameter("warm_start").as_bool();
   solver_config_.shift_on_warm_start = get_parameter("shift_on_warm_start").as_bool();
   const auto q = get_parameter("q_diag").as_double_array();
@@ -414,13 +418,17 @@ bool NmpcNode::loadParameters(std::string * error)
   // --- trajectory config (config/trajectory_params.yaml values arrive as parameters) ----------
   trajectory_params_.type = TrajectoryType::Hover;
   const std::string ttype = get_parameter("trajectory.type").as_string();
-  if (ttype == "hover") {trajectory_params_.type = TrajectoryType::Hover;}
-  else if (ttype == "figure8") {trajectory_params_.type = TrajectoryType::Figure8;}
-  else if (ttype == "lemniscate") {trajectory_params_.type = TrajectoryType::Lemniscate;}
-  else if (ttype == "circle") {trajectory_params_.type = TrajectoryType::Circle;}
-  else if (ttype == "waypoints") {trajectory_params_.type = TrajectoryType::Waypoints;}
-  else if (ttype == "step") {trajectory_params_.type = TrajectoryType::Step;}
-  else {
+  if (ttype == "hover") {
+    trajectory_params_.type = TrajectoryType::Hover;
+  } else if (ttype == "figure8") {
+    trajectory_params_.type = TrajectoryType::Figure8;
+  } else if (ttype == "lemniscate") {
+    trajectory_params_.type = TrajectoryType::Lemniscate;
+  } else if (ttype == "circle") {
+    trajectory_params_.type = TrajectoryType::Circle;
+  } else if (ttype == "waypoints") {
+    trajectory_params_.type = TrajectoryType::Waypoints;
+  } else if (ttype == "step") {trajectory_params_.type = TrajectoryType::Step;} else {
     if (error) {*error = "unknown trajectory.type '" + ttype + "'";}
     return false;
   }
@@ -432,7 +440,8 @@ bool NmpcNode::loadParameters(std::string * error)
   trajectory_params_.amplitude_z = get_parameter("trajectory.amplitude_z").as_double();
   trajectory_params_.period = get_parameter("trajectory.period").as_double();
   trajectory_params_.ramp_in_time = get_parameter("trajectory.ramp_in_time").as_double();
-  trajectory_params_.yaw_follows_velocity = get_parameter("trajectory.yaw_follows_velocity").as_bool();
+  trajectory_params_.yaw_follows_velocity =
+    get_parameter("trajectory.yaw_follows_velocity").as_bool();
   trajectory_params_.fixed_yaw = get_parameter("trajectory.fixed_yaw").as_double();
   trajectory_params_.max_velocity = get_parameter("trajectory.max_velocity").as_double();
   trajectory_params_.max_acceleration = get_parameter("trajectory.max_acceleration").as_double();
@@ -447,7 +456,8 @@ bool NmpcNode::loadParameters(std::string * error)
     return false;
   }
   if (solver_config_.q_diag.size() != 12 || solver_config_.r_diag.size() != 4 ||
-      solver_config_.q_terminal_diag.size() != 12) {
+    solver_config_.q_terminal_diag.size() != 12)
+  {
     if (error) {*error = "weight vector sizes must be 12/4/12 (they weight the cost residual)";}
     return false;
   }
@@ -533,13 +543,15 @@ rcl_interfaces::msg::SetParametersResult NmpcNode::onParameterUpdate(
     const std::string & n = p.get_name();
     if (n == "trajectory.type") {
       const std::string t = p.as_string();
-      if (t == "hover") {tp.type = TrajectoryType::Hover;}
-      else if (t == "figure8") {tp.type = TrajectoryType::Figure8;}
-      else if (t == "lemniscate") {tp.type = TrajectoryType::Lemniscate;}
-      else if (t == "circle") {tp.type = TrajectoryType::Circle;}
-      else if (t == "waypoints") {tp.type = TrajectoryType::Waypoints;}
-      else if (t == "step") {tp.type = TrajectoryType::Step;}
-      else {
+      if (t == "hover") {tp.type = TrajectoryType::Hover;} else if (t == "figure8") {
+        tp.type = TrajectoryType::Figure8;
+      } else if (t == "lemniscate") {
+        tp.type = TrajectoryType::Lemniscate;
+      } else if (t == "circle") {
+        tp.type = TrajectoryType::Circle;
+      } else if (t == "waypoints") {tp.type = TrajectoryType::Waypoints;} else if (t == "step") {
+        tp.type = TrajectoryType::Step;
+      } else {
         result.successful = false;
         result.reason = "unknown trajectory.type '" + t + "'";
         return result;
@@ -549,17 +561,25 @@ rcl_interfaces::msg::SetParametersResult NmpcNode::onParameterUpdate(
       const auto v = p.as_double_array();
       if (v.size() == 3) {tp.center = Eigen::Vector3d(v[0], v[1], v[2]);}
       have_trajectory = true;
-    } else if (n == "trajectory.altitude") {tp.altitude = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.amplitude_x") {tp.amplitude_x = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.amplitude_y") {tp.amplitude_y = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.amplitude_z") {tp.amplitude_z = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.period") {tp.period = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.ramp_in_time") {tp.ramp_in_time = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.yaw_follows_velocity") {
+    } else if (n == "trajectory.altitude") {
+      tp.altitude = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.amplitude_x") {
+      tp.amplitude_x = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.amplitude_y") {
+      tp.amplitude_y = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.amplitude_z") {
+      tp.amplitude_z = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.period") {
+      tp.period = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.ramp_in_time") {
+      tp.ramp_in_time = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.yaw_follows_velocity") {
       tp.yaw_follows_velocity = p.as_bool(); have_trajectory = true;
-    } else if (n == "trajectory.fixed_yaw") {tp.fixed_yaw = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.max_velocity") {tp.max_velocity = p.as_double(); have_trajectory = true;}
-    else if (n == "trajectory.max_acceleration") {
+    } else if (n == "trajectory.fixed_yaw") {
+      tp.fixed_yaw = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.max_velocity") {
+      tp.max_velocity = p.as_double(); have_trajectory = true;
+    } else if (n == "trajectory.max_acceleration") {
       tp.max_acceleration = p.as_double(); have_trajectory = true;
     }
   }
@@ -585,14 +605,21 @@ rcl_interfaces::msg::SetParametersResult NmpcNode::onParameterUpdate(
 
   // Accept plain scalar/timing params that do not need reconfiguration.
   for (const auto & p : params) {
-    if (p.get_name() == "control_rate_hz") {control_rate_hz_ = p.as_double();}
-    else if (p.get_name() == "state_timeout_s") {state_timeout_s_ = p.as_double();}
-    else if (p.get_name() == "latency_compensation_s") {latency_compensation_s_ = p.as_double();}
-    else if (p.get_name() == "takeoff_altitude_m") {takeoff_altitude_m_ = p.as_double();}
-    else if (p.get_name() == "px4_hover_thrust") {px4_hover_thrust_ = p.as_double();}
-    else if (p.get_name() == "max_jump_on_switch_m") {max_jump_on_switch_m_ = p.as_double();}
-    else if (p.get_name() == "publish_visualisation") {publish_visualisation_ = p.as_bool();}
-    else if (p.get_name() == "log_solve_time_warn_ms") {log_solve_time_warn_ms_ = p.as_double();}
+    if (p.get_name() == "control_rate_hz") {
+      control_rate_hz_ = p.as_double();
+    } else if (p.get_name() == "state_timeout_s") {
+      state_timeout_s_ = p.as_double();
+    } else if (p.get_name() == "latency_compensation_s") {
+      latency_compensation_s_ = p.as_double();
+    } else if (p.get_name() == "takeoff_altitude_m") {
+      takeoff_altitude_m_ = p.as_double();
+    } else if (p.get_name() == "px4_hover_thrust") {
+      px4_hover_thrust_ = p.as_double();
+    } else if (p.get_name() == "max_jump_on_switch_m") {
+      max_jump_on_switch_m_ = p.as_double();
+    } else if (p.get_name() == "publish_visualisation") {
+      publish_visualisation_ = p.as_bool();
+    } else if (p.get_name() == "log_solve_time_warn_ms") {log_solve_time_warn_ms_ = p.as_double();}
   }
   return result;
 }
@@ -634,7 +661,7 @@ void NmpcNode::onVehicleStatus(const VehicleStatusFlags & flags)
   offboard_active_.store(flags.offboard_active);
   // Pilot took over while we were tracking: drop to Streaming and log loudly (§7.3).
   if (was_offboard && !flags.offboard_active &&
-      controller_state_.load() == ControllerState::Tracking)
+    controller_state_.load() == ControllerState::Tracking)
   {
     RCLCPP_ERROR(get_logger(), "offboard lost while tracking — pilot has taken over");
     controller_state_.store(ControllerState::Streaming);
@@ -669,7 +696,8 @@ void NmpcNode::onSetTrajectory(
       return;
   }
   if (spec.type != uav_mpc::msg::TrajectorySpec::TYPE_HOVER &&
-      spec.type != uav_mpc::msg::TrajectorySpec::TYPE_STEP && spec.period <= 0.0) {
+    spec.type != uav_mpc::msg::TrajectorySpec::TYPE_STEP && spec.period <= 0.0)
+  {
     response->message = "period must be > 0 for periodic types";
     return;
   }
@@ -689,7 +717,9 @@ void NmpcNode::onSetTrajectory(
   tp.ramp_in_time = spec.ramp_in_time;
   tp.max_velocity = spec.max_velocity;
   tp.max_acceleration = spec.max_acceleration;
-  for (const auto & w : spec.waypoints) {tp.waypoints.push_back(toEigen(w));}
+  for (const auto & w : spec.waypoints) {
+    tp.waypoints.push_back(toEigen(w));
+  }
   tp.segment_times.assign(spec.segment_times.begin(), spec.segment_times.end());
 
   // --- gate on controller state ----------------------------------------------------------------
@@ -749,8 +779,8 @@ void NmpcNode::controlLoop()
 {
   // --- 0. timing ----------------------------------------------------------------------------
   const rclcpp::Time now = this->now();
-  loop_period_ms_ = (last_tick_time_.nanoseconds() == 0)
-    ? 0.0 : (now - last_tick_time_).seconds() * 1e3;
+  loop_period_ms_ = (last_tick_time_.nanoseconds() == 0) ?
+    0.0 : (now - last_tick_time_).seconds() * 1e3;
   last_tick_time_ = now;
   const auto t_start = std::chrono::steady_clock::now();
   // Lyrical's RCLCPP_*_THROTTLE expands to a lambda that reference-captures the clock, which
@@ -791,8 +821,12 @@ void NmpcNode::controlLoop()
     const double t_traj = (now - trajectory_start_time_).seconds();
     const auto refs = trajectory_->referenceHorizon(
       t_traj, dt, n, airframe_, AttitudeRep::Quaternion);
-    for (int k = 0; k <= n; ++k) {x_refs_[static_cast<std::size_t>(k)] = refs[k].state;}
-    for (int k = 0; k < n; ++k) {u_refs_[static_cast<std::size_t>(k)] = refs[k].input;}
+    for (int k = 0; k <= n; ++k) {
+      x_refs_[static_cast<std::size_t>(k)] = refs[k].state;
+    }
+    for (int k = 0; k < n; ++k) {
+      u_refs_[static_cast<std::size_t>(k)] = refs[k].input;
+    }
   }
 
   // --- 5. push into acados + solve ---------------------------------------------------------------
@@ -829,12 +863,12 @@ void NmpcNode::controlLoop()
     }
   }
 
-  // --- 7. telemetry -------------------------------------------------------------------------------
+  // --- 7. telemetry -----------------------------------------------------------------------------
   if (vehicle_) {vehicle_->publishControlMode();}
   publishStatus(result, x0);
   publishVisualisation();
 
-  // --- 8. budget -----------------------------------------------------------------------------------
+  // --- 8. budget ---------------------------------------------------------------------------------
   const auto t_end = std::chrono::steady_clock::now();
   loop_duration_ms_ = std::chrono::duration<double, std::milli>(t_end - t_start).count();
   if (loop_duration_ms_ > log_solve_time_warn_ms_) {
@@ -856,7 +890,8 @@ bool NmpcNode::assembleState(StateVec * x0, std::string * why_stale)
   state_age_ms_ = std::max({age_pos, age_att, age_rates}) * 1e3;
 
   if (!position_valid_ || age_pos > state_timeout_s_ || age_att > state_timeout_s_ ||
-      age_rates > state_timeout_s_) {
+    age_rates > state_timeout_s_)
+  {
     if (why_stale) {
       *why_stale = "state stale: pos_age=" + std::to_string(age_pos) +
         " att_age=" + std::to_string(age_att) + " rates_age=" + std::to_string(age_rates) +
@@ -909,7 +944,9 @@ AttitudeThrustCommand NmpcNode::buildCommand(
   cmd.normalised_thrust = normaliseThrust(T);
   // Predicted body-z rate at stage 1 (rates are the last three states).
   cmd.yaw_rate_feedforward = x_pred_1(Layout::kRateIdx + 2);
-  for (int i = 0; i < 4; ++i) {cmd.rotor_thrust_newton(i) = u0(i);}
+  for (int i = 0; i < 4; ++i) {
+    cmd.rotor_thrust_newton(i) = u0(i);
+  }
   return cmd;
 }
 
@@ -929,14 +966,17 @@ void NmpcNode::fillTakeoffLandingHorizon(
 {
   using Layout = StateLayout<AttitudeRep::Quaternion>;
   const double z_start = x0(Layout::kPosIdx + 2);
-  const double z_end = (state == ControllerState::Takeoff)
-    ? takeoff_altitude_m_ : kLandingZThresholdM;
-  const double speed = (state == ControllerState::Takeoff)
-    ? takeoff_speed_mps_ : landing_speed_mps_;
+  const double z_end = (state == ControllerState::Takeoff) ?
+    takeoff_altitude_m_ : kLandingZThresholdM;
+  const double speed = (state == ControllerState::Takeoff) ?
+    takeoff_speed_mps_ : landing_speed_mps_;
 
   for (int k = 0; k <= n; ++k) {
     const double t_k = static_cast<double>(k) * dt;
-    double z_k = z_start + speed * t_k;
+    // Landing descends (z decreases) while takeoff ascends (z increases).
+    double z_k = (state == ControllerState::Takeoff) ?
+      z_start + speed * t_k :
+      z_start - speed * t_k;
     if (state == ControllerState::Takeoff) {
       z_k = std::min(z_k, z_end);
     } else {
@@ -987,63 +1027,64 @@ void NmpcNode::updateControllerState()
       return;  // timer should not be running, but be safe
 
     case ControllerState::Streaming: {
-      if (vehicle_) {vehicle_->requestOffboard();}
-      if (offboard_active_.load() && !armed_.load()) {requestArm();}
-      if (offboard_active_.load() && armed_.load()) {
-        controller_state_.store(ControllerState::Takeoff);
-        RCLCPP_INFO(get_logger(), "armed + offboard: taking off to %.2f m",
+        if (vehicle_) {vehicle_->requestOffboard();}
+        if (offboard_active_.load() && !armed_.load()) {requestArm();}
+        if (offboard_active_.load() && armed_.load()) {
+          controller_state_.store(ControllerState::Takeoff);
+          RCLCPP_INFO(get_logger(), "armed + offboard: taking off to %.2f m",
           takeoff_altitude_m_);
+        }
+        break;
       }
-      break;
-    }
 
     case ControllerState::Takeoff: {
-      Eigen::Vector3d p, v;
-      {
-        std::lock_guard<std::mutex> lk(state_mutex_);
-        p = position_enu_;
-        v = velocity_enu_;
-      }
+        Eigen::Vector3d p, v;
+        {
+          std::lock_guard<std::mutex> lk(state_mutex_);
+          p = position_enu_;
+          v = velocity_enu_;
+        }
       // REVIEW R1-9: the velocity gate is the TAKEOFF threshold, not the landing one — they
       // happened to be equal (0.2) so this was invisible until one of them changed.
-      if (std::abs(p.z() - takeoff_altitude_m_) < kTakeoffZWindowM &&
-          v.norm() < kTakeoffVThresholdMps) {
-        controller_state_.store(ControllerState::Tracking);
-        RCLCPP_INFO(get_logger(), "takeoff complete — tracking the active trajectory");
+        if (std::abs(p.z() - takeoff_altitude_m_) < kTakeoffZWindowM &&
+          v.norm() < kTakeoffVThresholdMps)
+        {
+          controller_state_.store(ControllerState::Tracking);
+          RCLCPP_INFO(get_logger(), "takeoff complete — tracking the active trajectory");
+        }
+        break;
       }
-      break;
-    }
 
     case ControllerState::Tracking: {
-      if (landing_requested_.load()) {
-        controller_state_.store(ControllerState::Landing);
-        RCLCPP_INFO(get_logger(), "landing requested — descending at %.2f m/s",
+        if (landing_requested_.load()) {
+          controller_state_.store(ControllerState::Landing);
+          RCLCPP_INFO(get_logger(), "landing requested — descending at %.2f m/s",
           landing_speed_mps_);
-      } else if (!offboard_active_.load()) {
+        } else if (!offboard_active_.load()) {
         // handled loudly in onVehicleStatus; here just make sure we do not keep tracking.
-        controller_state_.store(ControllerState::Streaming);
+          controller_state_.store(ControllerState::Streaming);
+        }
+        break;
       }
-      break;
-    }
 
     case ControllerState::Landing: {
-      Eigen::Vector3d p, v;
-      {
-        std::lock_guard<std::mutex> lk(state_mutex_);
-        p = position_enu_;
-        v = velocity_enu_;
-      }
-      if (p.z() < kLandingZThresholdM && v.norm() < kLandingVThresholdMps) {
+        Eigen::Vector3d p, v;
+        {
+          std::lock_guard<std::mutex> lk(state_mutex_);
+          p = position_enu_;
+          v = velocity_enu_;
+        }
+        if (p.z() < kLandingZThresholdM && v.norm() < kLandingVThresholdMps) {
         // REVIEW R1-12: clear the landing latch when the mission actually completes, so a
         // later re-activation (Streaming -> Takeoff -> Tracking) does not instantly re-trigger
         // Landing from a stale flag. on_activate also clears it; this is the in-loop safety.
-        landing_requested_.store(false);
-        controller_state_.store(ControllerState::Idle);
-        requestDisarm();
-        RCLCPP_INFO(get_logger(), "landed — controller idle");
+          landing_requested_.store(false);
+          controller_state_.store(ControllerState::Idle);
+          requestDisarm();
+          RCLCPP_INFO(get_logger(), "landed — controller idle");
+        }
+        break;
       }
-      break;
-    }
 
     case ControllerState::Failsafe:
       break;  // recovery is decided in controlLoop on the first successful solve
@@ -1150,7 +1191,8 @@ void NmpcNode::publishVisualisation()
 {
   if (!publish_visualisation_) {return;}
   if (pub_predicted_path_->get_subscription_count() == 0 &&
-      pub_reference_path_->get_subscription_count() == 0) {
+    pub_reference_path_->get_subscription_count() == 0)
+  {
     return;  // nobody is watching; skip the allocation (§7.4)
   }
 

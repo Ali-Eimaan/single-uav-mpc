@@ -68,7 +68,7 @@ def _generated_dir(repo_root: Path) -> Path:
 
 def _generated_json(repo_root: Path) -> dict:
     """The committed acados OCP JSON; fails with the regeneration command when missing."""
-    path = repo_root / "codegen/codegen_output/acados_ocp_quadrotor.json"
+    path = repo_root / "codegen/codegen_output/c_generated_code/acados_ocp_quadrotor.json"
     if not path.is_file():
         pytest.fail(
             "generated solver missing — run:\n"
@@ -136,7 +136,7 @@ def test_casadi_model_builds(repo_root):
     assert casadi.depends_on(model.f_expl_expr, model.p), \
         "f_expl must depend on p (wind + mass_scale enter through the drag term)"
     # ... and on nothing else: every free variable must be a component of x, u or p.
-    free_vars = casadi.free(model.f_expl_expr)
+    free_vars = casadi.symvar(model.f_expl_expr)
     assert len(free_vars) > 0, "f_expl has no free variables — model is constant?"
     for sv in free_vars:
         assert (casadi.depends_on(sv, model.x) or casadi.depends_on(sv, model.u)
@@ -303,7 +303,9 @@ def test_ocp_dimensions_match_config(repo_root):
     if header.is_file():
         text = header.read_text()
         for macro, expected in (("NX", nx_expected), ("NU", 4), ("NP", 8)):
-            m = re.search(rf"#define\s+{macro}\s+(\d+)", text)
+            # acados < 0.6.0:  #define QUADROTOR_NX 13
+            # acados >= 0.6.0: #define OCP_QUADROTOR_<HASH>_NX 13
+            m = re.search(rf"#define\s+\S*{macro}\s+(\d+)", text)
             assert m, f"{macro} not found in {header}"
             assert int(m.group(1)) == expected, \
                 f"{macro} mismatch: header defines {m.group(1)}, expected {expected}"
@@ -333,8 +335,14 @@ def test_solver_options_are_realtime(repo_root):
         f"qp_solver_iter_max = {iter_max} is outside (0, 100]"
     assert so.get("nlp_solver_max_iter") == 1, \
         "nlp_solver_max_iter must be 1 (single SQP iteration per sample, RTI)"
-    assert so.get("sim_method_num_stages") == 4, \
-        "sim_method_num_stages must be 4 (RK4)"
+    num_stages = so.get("sim_method_num_stages")
+    # acados >= 0.6.0: per-stage list; earlier: scalar
+    if isinstance(num_stages, list):
+        assert all(s == 4 for s in num_stages), \
+            f"sim_method_num_stages: all entries must be 4 (RK4), got {num_stages}"
+    else:
+        assert num_stages == 4, \
+            "sim_method_num_stages must be 4 (RK4)"
 
 
 @pytest.mark.slow

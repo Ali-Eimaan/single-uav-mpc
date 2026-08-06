@@ -309,8 +309,10 @@ def _format_constants(constants: AirframeConstants) -> str:
         if isinstance(value, np.ndarray):
             entries = ",".join(f"{v:.17g}" for v in value.reshape(-1))
             parts.append(f"{key}=[{entries}]")
-        else:
+        elif isinstance(value, (int, float)):
             parts.append(f"{key}={value:.17g}")
+        else:
+            parts.append(f"{key}={value}")
     return ";".join(parts)
 
 

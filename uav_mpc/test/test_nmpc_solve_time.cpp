@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <yaml-cpp/yaml.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -23,8 +25,6 @@
 #include <random>
 #include <string>
 #include <vector>
-
-#include <yaml-cpp/yaml.h>
 
 #include "uav_mpc/acados_wrapper.hpp"
 #include "uav_mpc/quadrotor_dynamics.hpp"
@@ -39,7 +39,7 @@
 
 // REVIEW R1-13: the budgets are the A2 acceptance criteria, generated at configure time from
 // acceptance_criteria.yaml (the single source of truth). Do not edit them here.
-#include "acceptance_criteria.h"
+#include "acceptance_criteria.h"  // NOLINT(build/include_subdir)
 
 namespace
 {
@@ -145,9 +145,9 @@ void reportPercentiles(const std::string & prefix, const std::vector<double> & t
   const double max = sorted.back();
   const double mean =
     std::accumulate(sorted.begin(), sorted.end(), 0.0) / static_cast<double>(sorted.size());
-  const double median = sorted.size() % 2 == 1
-    ? sorted[sorted.size() / 2]
-    : 0.5 * (sorted[sorted.size() / 2 - 1] + sorted[sorted.size() / 2]);
+  const double median = sorted.size() % 2 == 1 ?
+    sorted[sorted.size() / 2] :
+    0.5 * (sorted[sorted.size() / 2 - 1] + sorted[sorted.size() / 2]);
   const double p90 = percentile(sorted, 0.90);
   const double p95 = percentile(sorted, 0.95);
   const double p99 = percentile(sorted, 0.99);
@@ -217,9 +217,9 @@ TEST(NmpcSolveTime, HoverSolveWithinBudget)
   reportPercentiles("hover", times);
   std::vector<double> sorted = times;
   std::sort(sorted.begin(), sorted.end());
-  const double median = sorted.size() % 2 == 1
-    ? sorted[sorted.size() / 2]
-    : 0.5 * (sorted[sorted.size() / 2 - 1] + sorted[sorted.size() / 2]);
+  const double median = sorted.size() % 2 == 1 ?
+    sorted[sorted.size() / 2] :
+    0.5 * (sorted[sorted.size() / 2 - 1] + sorted[sorted.size() / 2]);
 
   const double median_budget = budgetMs("UAV_MPC_SOLVE_MEDIAN_BUDGET_MS", kMedianBudgetMs);
   const double p99_budget = budgetMs("UAV_MPC_SOLVE_P99_BUDGET_MS", kP99BudgetMs);
@@ -257,29 +257,29 @@ TEST(NmpcSolveTime, Figure8SolveWithinBudget)
   times.reserve(static_cast<std::size_t>(kSamples));
 
   auto solve_at = [&](bool record) {
-    const auto refs = gen.referenceHorizon(
+      const auto refs = gen.referenceHorizon(
       t0, dt, n, airframe, uav_mpc::AttitudeRep::Quaternion);
-    std::vector<Eigen::VectorXd> x_refs, u_refs;
-    x_refs.reserve(refs.size());
-    u_refs.reserve(refs.size() - 1);
-    for (std::size_t k = 0; k < refs.size(); ++k) {
-      x_refs.push_back(refs[k].state);
-      if (k + 1 < refs.size()) {u_refs.push_back(refs[k].input);}
-    }
-    solver.setReferenceHorizon(x_refs, u_refs);
+      std::vector<Eigen::VectorXd> x_refs, u_refs;
+      x_refs.reserve(refs.size());
+      u_refs.reserve(refs.size() - 1);
+      for (std::size_t k = 0; k < refs.size(); ++k) {
+        x_refs.push_back(refs[k].state);
+        if (k + 1 < refs.size()) {u_refs.push_back(refs[k].input);}
+      }
+      solver.setReferenceHorizon(x_refs, u_refs);
 
-    Eigen::VectorXd x0 = refs.front().state;
-    perturbState(&x0, rng);
-    solver.setInitialState(x0);
+      Eigen::VectorXd x0 = refs.front().state;
+      perturbState(&x0, rng);
+      solver.setInitialState(x0);
 
-    const auto s0 = std::chrono::steady_clock::now();
-    const uav_mpc::SolveResult r = solver.solve();
-    const auto s1 = std::chrono::steady_clock::now();
-    if (record) {times.push_back(std::chrono::duration<double, std::milli>(s1 - s0).count());}
-    solver.shiftWarmStart();
-    t0 += dt;
-    return r;
-  };
+      const auto s0 = std::chrono::steady_clock::now();
+      const uav_mpc::SolveResult r = solver.solve();
+      const auto s1 = std::chrono::steady_clock::now();
+      if (record) {times.push_back(std::chrono::duration<double, std::milli>(s1 - s0).count());}
+      solver.shiftWarmStart();
+      t0 += dt;
+      return r;
+    };
 
   // Warm up at t = 0 (hover blend still active), then let the orbit ramp in.
   for (int i = 0; i < kWarmUpSolves; ++i) {
@@ -296,9 +296,9 @@ TEST(NmpcSolveTime, Figure8SolveWithinBudget)
   reportPercentiles("figure8", times);
   std::vector<double> sorted = times;
   std::sort(sorted.begin(), sorted.end());
-  const double median = sorted.size() % 2 == 1
-    ? sorted[sorted.size() / 2]
-    : 0.5 * (sorted[sorted.size() / 2 - 1] + sorted[sorted.size() / 2]);
+  const double median = sorted.size() % 2 == 1 ?
+    sorted[sorted.size() / 2] :
+    0.5 * (sorted[sorted.size() / 2 - 1] + sorted[sorted.size() / 2]);
 
   EXPECT_TRUE(all_ok) << "at least one figure-8 solve returned a non-Success status";
   EXPECT_LE(median, budgetMs("UAV_MPC_SOLVE_MEDIAN_BUDGET_MS", kMedianBudgetMs))
