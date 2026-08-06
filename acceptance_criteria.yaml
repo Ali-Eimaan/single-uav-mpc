@@ -1,0 +1,30 @@
+# Acceptance criteria — single source of truth.
+#
+# Every quantitative claim the repo makes lives here and is read back by the artifact that
+# enforces it:
+#   - A2 (solve-time budget):      test_nmpc_solve_time.cpp via a configure-time generated
+#                                  header (scripts/acceptance_criteria_cmake.py + CMake).
+#   - A6 (SITL hover assertions):  scripts/assert_hover.py.
+#
+# Editing a number here is the ONLY way to change a criterion — grep for a duplicated magic
+# constant in a test or script is a REVIEW finding. See .deepseek/01_OVERVIEW.md §1.3 for the
+# A-criteria table and .deepseek/14_CI.md §14.1 for the "solve-time noise" exception below.
+
+# A2 — NMPC solve-time budget at 100 Hz (median / p99 over 10k warm-started solves).
+# The p99 is the gate: a 100 Hz loop that misses once per second is broken. These are the
+# repo's real-time claim and are deliberately NOT overridable locally; GitHub-hosted shared
+# runners are too noisy, so CI relaxes them via the UAV_MPC_SOLVE_*_BUDGET_MS environment
+# overrides (documented exception in .github/workflows/colcon_build.yml).
+a2_solve_time_ms:
+  p99: 2.0
+  median: 1.0
+
+# A6 — SITL hover smoke-test assertions (scripts/assert_hover.py). Deliberately looser than
+# the unit tests: a shared CI runner is not a flight computer.
+a6_hover:
+  max_time_to_tracking_s: 20.0
+  max_rms_position_error_m: 0.15
+  max_peak_position_error_m: 0.30
+  max_solver_failures: 0
+  max_p99_solve_ms: 5.0
+  min_altitude_fraction: 0.5   # of takeoff_altitude, at any point after takeoff

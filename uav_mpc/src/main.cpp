@@ -69,8 +69,9 @@ int main(int argc, char ** argv)
 
   // Two threads: the MutuallyExclusive control group can starve the Reentrant telemetry
   // group without blocking it (they never share a callback).
+  // Lyrical Luth renamed ExecutorArgs to ExecutorOptions.
   rclcpp::executors::MultiThreadedExecutor executor(
-    rclcpp::executor::ExecutorArgs(), 2);
+    rclcpp::ExecutorOptions(), 2);
   executor.add_node(node->get_node_base_interface());
   executor.spin();
 

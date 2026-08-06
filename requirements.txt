@@ -33,6 +33,10 @@ seaborn==0.13.2
 # shipped with Lyrical Luth — the default storage plugin has changed across distros before.
 rosbags==0.10.9        # UNVERIFIED against the Lyrical rosbag2 format
 
+# --- acceptance criteria (REVIEW R1-13) ---
+# scripts/assert_hover.py and scripts/acceptance_criteria_cmake.py read acceptance_criteria.yaml.
+pyyaml==6.0.3          # UNVERIFIED cp314; pure-python build on 3.14 if a wheel is missing
+
 # --- dev ---
 pytest==8.4.1
 black==25.1.0

@@ -164,10 +164,11 @@ jobs:
 
       - name: colcon test
         env:
-          # SOLVE-TIME NOISE decision (§14.1): the strict p99 budget (2 ms) is the repo's
-          # real-time claim and runs locally and on self-hosted runners. GitHub-hosted shared
-          # runners are too noisy, so relax here via the environment overrides in
-          # test_nmpc_solve_time.cpp. Do NOT disable the test.
+          # SOLVE-TIME NOISE decision (§14.1): the strict A2 p99 budget (acceptance_criteria.yaml)
+          # is the repo's real-time claim and runs locally and on self-hosted runners.
+          # GitHub-hosted shared runners are too noisy, so relax here via the environment
+          # overrides consumed by test_nmpc_solve_time.cpp. Do NOT disable the test; these
+          # overrides are the documented exception to acceptance_criteria.yaml.
           UAV_MPC_SOLVE_P99_BUDGET_MS: "5.0"
           UAV_MPC_SOLVE_MEDIAN_BUDGET_MS: "3.0"
         run: |

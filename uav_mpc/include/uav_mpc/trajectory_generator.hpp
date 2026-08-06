@@ -108,6 +108,12 @@ public:
   static StateInputReference flatToStateInput(
     const FlatState & flat, const QuadrotorParams & airframe, AttitudeRep rep);
 
+  /// Non-allocating overload: pre-built {ControlAllocation} avoids constructing
+  /// {QuadrotorDynamics} (with its LDLT factorisation) for every horizon point.  REVIEW R1-6.
+  static StateInputReference flatToStateInput(
+    const FlatState & flat, const QuadrotorParams & airframe,
+    const ControlAllocation & alloc, AttitudeRep rep);
+
   /// Convenience: horizon of full references, ready to memcpy into the acados yref buffers.
   std::vector<StateInputReference> referenceHorizon(
     double t0, double dt, int n_steps, const QuadrotorParams & airframe, AttitudeRep rep) const;

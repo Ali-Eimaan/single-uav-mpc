@@ -146,7 +146,9 @@ target_include_directories(${PROJECT_NAME}_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(${PROJECT_NAME}_core Eigen3 yaml_cpp_vendor)
+# Lyrical Luth removed ament_target_dependencies(); plain target_link_libraries() with the
+# exported namespaced targets is the replacement. Pre-existing: this package had never compiled.
+target_link_libraries(${PROJECT_NAME}_core Eigen3::Eigen yaml-cpp)
 if(UAV_MPC_WITH_ACADOS)
   target_include_directories(${PROJECT_NAME}_core PRIVATE
     ${ACADOS_INCLUDE_DIRS}
@@ -178,13 +180,14 @@ add_library(nmpc_component SHARED
   src/vehicle_interface_px4.cpp
 )
 target_link_libraries(nmpc_component ${PROJECT_NAME}_core)
-ament_target_dependencies(nmpc_component
-  rclcpp rclcpp_lifecycle rclcpp_components lifecycle_msgs
-  std_msgs geometry_msgs nav_msgs tf2 tf2_ros tf2_eigen Eigen3
+target_link_libraries(nmpc_component
+  rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle rclcpp_components::component
+  lifecycle_msgs::lifecycle_msgs std_msgs::std_msgs geometry_msgs::geometry_msgs
+  nav_msgs::nav_msgs tf2::tf2 tf2_ros::tf2_ros tf2_eigen::tf2_eigen Eigen3::Eigen
 )
 if(UAV_MPC_PX4_BACKEND)
   target_compile_definitions(nmpc_component PRIVATE UAV_MPC_WITH_PX4_MSGS)
-  ament_target_dependencies(nmpc_component px4_msgs)
+  target_link_libraries(nmpc_component px4_msgs::px4_msgs)
 endif()
 rclcpp_components_register_node(nmpc_component
   PLUGIN "uav_mpc::NmpcNode"
@@ -196,7 +199,7 @@ target_link_libraries(nmpc_component "${cpp_typesupport_target}")
 
 add_executable(nmpc_node src/main.cpp)
 target_link_libraries(nmpc_node nmpc_component ${PROJECT_NAME}_core)
-ament_target_dependencies(nmpc_node rclcpp rclcpp_lifecycle)
+target_link_libraries(nmpc_node rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle)
 
 # ------------------------------------------------------------------------------------------------
 # Install
@@ -227,24 +230,69 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
 
+  # UAV_MPC_SOURCE_DIR is the PACKAGE source dir: the tests resolve params/ and config/ below it
+  # (e.g. test_dynamics.cpp appends /params/x500_calibration.yaml). It used to point at the repo
+  # root, so every test that opened a calibration file threw YAML::BadFile — the tests had
+  # never run. Fixed alongside REVIEW R1-2 so the regression test can execute.
+
+  # REVIEW R1-13: the A2 solve-time budgets come from acceptance_criteria.yaml (repo root) —
+  # single source of truth. scripts/acceptance_criteria_cmake.py is the only place that reads
+  # it for C++: it emits KEY=VALUE lines which configure_file substitutes into
+  # test/acceptance_criteria.h.in. CI's environment overrides stay the documented exception
+  # (§14.1); they no longer mirror any hard-coded constant.
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  execute_process(
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/acceptance_criteria_cmake.py
+    OUTPUT_VARIABLE ACCEPTANCE_LINES
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE ACCEPTANCE_RC)
+  if(NOT ACCEPTANCE_RC EQUAL 0)
+    message(FATAL_ERROR
+      "acceptance_criteria_cmake.py failed (rc=${ACCEPTANCE_RC}): cannot read "
+      "acceptance_criteria.yaml — do not hard-code the budgets")
+  endif()
+  # OUTPUT_VARIABLE is a single string: newlines are not CMake list separators.
+  string(REPLACE "\n" ";" ACCEPTANCE_LINES "${ACCEPTANCE_LINES}")
+  foreach(_line IN LISTS ACCEPTANCE_LINES)
+    if(_line MATCHES "^([A-Z0-9_]+)=(.*)$")
+      set(${CMAKE_MATCH_1} ${CMAKE_MATCH_2})
+    endif()
+  endforeach()
+  configure_file(test/acceptance_criteria.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/acceptance_criteria.h @ONLY)
+
   ament_add_gtest(test_nmpc_solve_time test/test_nmpc_solve_time.cpp)
   target_link_libraries(test_nmpc_solve_time ${PROJECT_NAME}_core)
-  ament_target_dependencies(test_nmpc_solve_time Eigen3 yaml_cpp_vendor)
+  target_link_libraries(test_nmpc_solve_time Eigen3::Eigen yaml-cpp)
+  target_include_directories(test_nmpc_solve_time PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   target_compile_definitions(test_nmpc_solve_time PRIVATE
-    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     UAV_MPC_CODEGEN_DIR="${CODEGEN_DIR}"
   )
 
   ament_add_gtest(test_trajectory_continuity test/test_trajectory_continuity.cpp)
   target_link_libraries(test_trajectory_continuity ${PROJECT_NAME}_core)
   target_compile_definitions(test_trajectory_continuity PRIVATE
-    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
   # M1: finite-difference Jacobian check + ENU<->NED round-trips (§10.4).
   ament_add_gtest(test_dynamics test/test_dynamics.cpp)
   target_link_libraries(test_dynamics ${PROJECT_NAME}_core)
   target_compile_definitions(test_dynamics PRIVATE
-    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
+  # REVIEW R1-3/R1-4/R1-12: node-level regressions (failsafe thrust normalisation, level
+  # takeoff/landing attitude reference, landing latch cleared). Friend fixture — no acados, no
+  # backend. Needs rclcpp for the node, so it links the component's deps.
+  ament_add_gtest(test_nmpc_node test/test_nmpc_node.cpp)
+  target_link_libraries(test_nmpc_node nmpc_component ${PROJECT_NAME}_core)
+  target_link_libraries(test_nmpc_node
+    rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle
+    lifecycle_msgs::lifecycle_msgs std_msgs::std_msgs geometry_msgs::geometry_msgs
+    nav_msgs::nav_msgs tf2::tf2 tf2_ros::tf2_ros tf2_eigen::tf2_eigen Eigen3::Eigen)
+  target_compile_definitions(test_nmpc_node PRIVATE
+    UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
   ament_add_gtest(test_frame_conversions test/test_frame_conversions.cpp)
   target_link_libraries(test_frame_conversions ${PROJECT_NAME}_core)

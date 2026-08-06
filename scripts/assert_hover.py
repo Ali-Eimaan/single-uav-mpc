@@ -16,20 +16,22 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "analysis"))  # bag_utils lives next to the notebooks
 from bag_utils import read_topics, require_topic  # noqa: E402
 
-# Thresholds. Deliberately looser than the unit tests: a shared CI runner is not a flight
-# computer. Changing any of these is changing an acceptance criterion — update
-# .deepseek/01_OVERVIEW.md §1 in the same commit.
-MAX_TIME_TO_TRACKING_S = 20.0
-MAX_RMS_POSITION_ERROR_M = 0.15
-MAX_PEAK_POSITION_ERROR_M = 0.30
-MAX_SOLVER_FAILURES = 0
-MAX_P99_SOLVE_MS = 5.0
-MIN_ALTITUDE_FRACTION = 0.5  # of takeoff_altitude, at any point after takeoff
+# REVIEW R1-13: thresholds are criterion A6, read from acceptance_criteria.yaml at the repo
+# root — the single source of truth. Deliberately looser than the unit tests: a shared CI
+# runner is not a flight computer. Editing the YAML is the ONLY supported way to change them.
+_A6 = yaml.safe_load((REPO_ROOT / "acceptance_criteria.yaml").read_text())["a6_hover"]
+MAX_TIME_TO_TRACKING_S = float(_A6["max_time_to_tracking_s"])
+MAX_RMS_POSITION_ERROR_M = float(_A6["max_rms_position_error_m"])
+MAX_PEAK_POSITION_ERROR_M = float(_A6["max_peak_position_error_m"])
+MAX_SOLVER_FAILURES = int(_A6["max_solver_failures"])
+MAX_P99_SOLVE_MS = float(_A6["max_p99_solve_ms"])
+MIN_ALTITUDE_FRACTION = float(_A6["min_altitude_fraction"])  # of takeoff_altitude, after takeoff
 
 STATE_TRACKING = 3  # uav_mpc/msg/NmpcStatus.controller_state
 STATUS_SUCCESS = 0  # uav_mpc/msg/SolverDiagnostics.status

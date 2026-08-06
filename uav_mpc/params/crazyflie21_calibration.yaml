@@ -11,26 +11,25 @@ airframe:
   verified: false            # UNVERIFIED: flip to true once cross-checked
 
   # --- mass properties ---------------------------------------------------------------------
-  mass: 0.027                 # [kg] 27 g with the standard battery
+  mass: 0.027                 # [kg] 27 g with the standard battery  # datasheet
   inertia:                    # [kg m^2]
-    ixx: 1.657e-05
-    iyy: 1.657e-05
-    izz: 2.926e-05
-    ixy: 0.0
-    ixz: 0.0
-    iyz: 0.0
+    ixx: 1.657e-05            # UNVERIFIED — needs citation (Förster 2015?)
+    iyy: 1.657e-05            # UNVERIFIED
+    izz: 2.926e-05            # UNVERIFIED
+    ixy: 0.0                  # symmetry assumption
+    ixz: 0.0                  # symmetry assumption
+    iyz: 0.0                  # symmetry assumption
 
   # --- geometry ------------------------------------------------------------------------------
-  arm_length: 0.0325          # [m] 92 mm motor-to-motor diagonal => 32.5 mm arm
-  rotor_configuration: "quad_x"
+  arm_length: 0.0325          # [m] 92 mm motor-to-motor diagonal => 32.5 mm arm  # datasheet
 
   # --- propulsion ----------------------------------------------------------------------------
-  thrust_coeff: 2.88e-08      # [N/(rad/s)^2]
-  torque_coeff: 7.24e-10      # [N m/(rad/s)^2]
-  max_rotor_speed: 2618.0     # [rad/s] ~25000 rpm
-  min_thrust_per_rotor: 0.001 # [N]
-  max_thrust_per_rotor: 0.157 # [N] ~16 gf per motor
-  rotor_time_constant: 0.015  # [s]
+  thrust_coeff: 2.88e-08      # [N/(rad/s)^2]  # Förster (2015) MSc thesis
+  torque_coeff: 7.24e-10      # [N m/(rad/s)^2]  # Förster (2015) MSc thesis
+  max_rotor_speed: 2618.0     # [rad/s] ~25000 rpm  # datasheet
+  min_thrust_per_rotor: 0.001 # [N]  # UNVERIFIED — idle thrust estimate
+  max_thrust_per_rotor: 0.157 # [N] ~16 gf per motor  # derived from thrust_coeff
+  rotor_time_constant: 0.015  # [s]  # UNVERIFIED — rough estimate, needs identification
 
   # Thrust-to-weight = 4 * 0.157 / (0.027 * 9.80665) = 2.37.
   # NOTE: the CF2.1 has a much shorter attitude time constant than the X500 — the 100 Hz outer

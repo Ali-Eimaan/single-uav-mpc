@@ -155,6 +155,53 @@ TEST(DynamicsJacobians, EulerRepMatchesFiniteDifferences)
   for (int trial = 0; trial < 10; ++trial) {checkJacobiansOnce<AttitudeRep::Euler>(rng);}
 }
 
+/// REVIEW R1-2 regression: the analytic dRy/d(theta) once used cos(roll) where cos(pitch)
+/// belongs. The random sampler draws roll and pitch independently, so a collision is only
+/// guaranteed to be exercised when roll != pitch — pin a state with roll = 0.2, pitch = -0.5
+/// (both comfortably inside the singular-free envelope) and diff the Jacobian against central
+/// differences with the full 1e-6 relative tolerance.
+TEST(DynamicsJacobians, EulerRepRollDiffersFromPitchMatchesFiniteDifferences)
+{
+  using Dyn = QuadrotorDynamics<double, AttitudeRep::Euler>;
+  using SV = Dyn::StateVector;
+  using UV = Dyn::InputVector;
+
+  const QuadrotorParams params = QuadrotorParams::fromYaml(x500Path());
+  const Dyn dyn(params);
+
+  SV x = SV::Zero();
+  x(0) = 0.8; x(1) = -1.2; x(2) = 2.5;            // position
+  x(3) = 1.1; x(4) = -0.6; x(5) = 0.3;            // velocity
+  x(6) = 0.2; x(7) = -0.5; x(8) = 0.4;            // roll != pitch, yaw = 0.4
+  x(9) = 0.7; x(10) = -0.9; x(11) = 0.5;          // body rates
+
+  UV u;
+  u << 1.2, 1.4, 1.1, 1.3;                          // nonzero thrust, nonzero torque
+
+  typename Dyn::StateJacobian A;
+  typename Dyn::InputJacobian B;
+  dyn.jacobians(x, u, &A, &B);
+
+  typename Dyn::StateJacobian A_num;
+  typename Dyn::InputJacobian B_num;
+  centralDifferenceJacobians<AttitudeRep::Euler>(dyn, x, u, &A_num, &B_num);
+
+  for (int i = 0; i < Dyn::kNx; ++i) {
+    for (int j = 0; j < Dyn::kNx; ++j) {
+      const double rel = std::abs(A(i, j) - A_num(i, j)) / (1.0 + std::abs(A(i, j)));
+      EXPECT_LT(rel, 1e-6) << "A(" << i << "," << j << ") analytic " << A(i, j)
+                           << " vs fd " << A_num(i, j);
+    }
+  }
+  for (int i = 0; i < Dyn::kNx; ++i) {
+    for (int j = 0; j < Dyn::kNu; ++j) {
+      const double rel = std::abs(B(i, j) - B_num(i, j)) / (1.0 + std::abs(B(i, j)));
+      EXPECT_LT(rel, 1e-6) << "B(" << i << "," << j << ") analytic " << B(i, j)
+                           << " vs fd " << B_num(i, j);
+    }
+  }
+}
+
 // -----------------------------------------------------------------------------------------------
 // RK4 energy sanity (drag-free, torque-free)
 // -----------------------------------------------------------------------------------------------

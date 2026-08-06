@@ -60,14 +60,6 @@ constexpr double kCodegenTf = 1.0;
 constexpr int kStageResidual = 16;
 constexpr int kTerminalResidual = 12;
 
-std::string trim(const std::string & s)
-{
-  const auto first = s.find_first_not_of(" \t\r\n");
-  if (first == std::string::npos) {return "";}
-  const auto last = s.find_last_not_of(" \t\r\n");
-  return s.substr(first, last - first + 1);
-}
-
 }  // namespace
 
 /// PIMPL body. Holds the raw acados handles; empty when built without acados.

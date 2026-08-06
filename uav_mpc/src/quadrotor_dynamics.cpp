@@ -36,17 +36,20 @@ Eigen::Matrix<typename Derived::Scalar, 3, 3> skewMatrix(
 }
 
 /// Body-to-world rotation from ZYX (yaw-pitch-roll) Euler angles, R = Rz(psi) Ry(theta) Rx(phi).
+/// Naming convention shared with jacobians() below: cr/sr = cos/sin(roll), cth/sth =
+/// cos/sin(pitch), cy/sy = cos/sin(yaw). Never abbreviate cos(pitch) as `cp` — that collides
+/// with cos(roll) and has produced a real sign bug (REVIEW R1-2).
 template<typename Scalar>
 Eigen::Matrix<Scalar, 3, 3> eulerRotationZyx(const Eigen::Matrix<Scalar, 3, 1> & rpy)
 {
   const Scalar phi = rpy(0), theta = rpy(1), psi = rpy(2);
-  const Scalar cp = std::cos(theta), sp = std::sin(theta);
+  const Scalar cth = std::cos(theta), sth = std::sin(theta);
   const Scalar cr = std::cos(phi), sr = std::sin(phi);
   const Scalar cy = std::cos(psi), sy = std::sin(psi);
   Eigen::Matrix<Scalar, 3, 3> R;
-  R(0, 0) = cy * cp; R(0, 1) = cy * sp * sr - sy * cr; R(0, 2) = cy * sp * cr + sy * sr;
-  R(1, 0) = sy * cp; R(1, 1) = sy * sp * sr + cy * cr; R(1, 2) = sy * sp * cr - cy * sr;
-  R(2, 0) = -sp;     R(2, 1) = cp * sr;                 R(2, 2) = cp * cr;
+  R(0, 0) = cy * cth; R(0, 1) = cy * sth * sr - sy * cr; R(0, 2) = cy * sth * cr + sy * sr;
+  R(1, 0) = sy * cth; R(1, 1) = sy * sth * sr + cy * cr; R(1, 2) = sy * sth * cr - cy * sr;
+  R(2, 0) = -sth;     R(2, 1) = cth * sr;                 R(2, 2) = cth * cr;
   return R;
 }
 
@@ -205,6 +208,41 @@ void QuadrotorDynamics<Scalar, Rep>::buildAllocationMatrix()
   inertia_inv_ = params_.inertia.template cast<Scalar>().inverse();
 }
 
+// ----------------------------------------------------------------------------------------------
+// ControlAllocation (REVIEW R1-6)
+// ----------------------------------------------------------------------------------------------
+
+ControlAllocation ControlAllocation::fromParams(const QuadrotorParams & params)
+{
+  ControlAllocation alloc;
+  const double d = params.arm_length / std::sqrt(2.0);
+  const double c = params.torque_coeff / params.thrust_coeff;
+  Eigen::Matrix4d A;
+  A <<  1,  1,  1,  1,
+       -d,  d,  d, -d,
+       -d,  d, -d,  d,
+       -c, -c,  c,  c;
+  alloc.inverse = A.inverse();
+  alloc.min_thrust_per_rotor = params.min_thrust_per_rotor;
+  alloc.max_thrust_per_rotor = params.max_thrust_per_rotor;
+  return alloc;
+}
+
+bool ControlAllocation::allocateInverse(
+  double collective_thrust, const Eigen::Vector3d & torque, Eigen::Vector4d * u) const
+{
+  Eigen::Vector4d wrench;
+  wrench << collective_thrust, torque;
+  Eigen::Vector4d u_raw = inverse * wrench;
+  bool clamped = false;
+  for (int i = 0; i < 4; ++i) {
+    if (u_raw(i) < min_thrust_per_rotor) {u_raw(i) = min_thrust_per_rotor; clamped = true;}
+    if (u_raw(i) > max_thrust_per_rotor) {u_raw(i) = max_thrust_per_rotor; clamped = true;}
+  }
+  if (u != nullptr) {*u = u_raw;}
+  return !clamped;
+}
+
 template<typename Scalar, AttitudeRep Rep>
 typename QuadrotorDynamics<Scalar, Rep>::StateVector
 QuadrotorDynamics<Scalar, Rep>::f(const StateVector & x, const InputVector & u) const
@@ -339,12 +377,8 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     A->operator()(kAtt, kAtt + 2) = -Scalar(0.5) * w(1);
     A->operator()(kAtt, kAtt + 3) = -Scalar(0.5) * w(2);
     A->template block<3, 1>(kAtt + 1, kAtt) = Scalar(0.5) * w;
-    A->template block<3, 1>(kAtt + 1, kAtt + 1) =
-      Scalar(0.5) * Eigen::Matrix<Scalar, 3, 1>(0, w(2), -w(1));
-    A->template block<3, 1>(kAtt + 1, kAtt + 2) =
-      Scalar(0.5) * Eigen::Matrix<Scalar, 3, 1>(-w(2), 0, w(0));
-    A->template block<3, 1>(kAtt + 1, kAtt + 3) =
-      Scalar(0.5) * Eigen::Matrix<Scalar, 3, 1>(w(1), -w(0), 0);
+    // ∂(qv × ω)/∂qv = -[ω]×, so ∂q̇_v/∂q_v = -½[ω]×  (REVIEW R1-1).
+    A->template block<3, 3>(kAtt + 1, kAtt + 1) = -Scalar(0.5) * skewMatrix(w);
 
     // q_dot wrt omega:  0.5 * L(q)[:, 1:4], L(q) the left-multiplication matrix of q.
     Eigen::Matrix<Scalar, 4, 3> dqdw;
@@ -355,23 +389,28 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     A->template block<4, 3>(kAtt, kRate) = Scalar(0.5) * dqdw;
   } else {
     // v_dot wrt rpy for the Euler branch. R = Rz Ry Rx, dR = dRz Ry Rx + Rz dRy Rx + Rz Ry dRx.
+    // Names: cr/sr = cos/sin(roll), cth/sth = cos/sin(pitch), cy/sy = cos/sin(yaw). The old
+    // `cp` meant cos(roll) here but cos(pitch) in eulerRotationZyx, and dRy used cos(roll)
+    // where cos(pitch) belongs — fixed in REVIEW R1-2.
     const Eigen::Matrix<Scalar, 3, 1> rpy = x.template segment<3>(kAtt);
     const Scalar phi = rpy(0), theta = rpy(1), psi = rpy(2);
-    const Scalar cp = std::cos(phi), sp = std::sin(phi);
-    const Scalar ct = std::cos(theta), st = std::sin(theta);
+    const Scalar cr = std::cos(phi), sr = std::sin(phi);
+    const Scalar cth = std::cos(theta), sth = std::sin(theta);
     const Scalar cy = std::cos(psi), sy = std::sin(psi);
 
     Eigen::Matrix<Scalar, 3, 3> Rx;
-    Rx << Scalar(1), 0, 0, 0, cp, -sp, 0, sp, cp;
+    Rx << Scalar(1), 0, 0, 0, cr, -sr, 0, sr, cr;
     Eigen::Matrix<Scalar, 3, 3> Ry;
-    Ry << ct, 0, st, 0, Scalar(1), 0, -st, 0, ct;
+    Ry << cth, 0, sth, 0, Scalar(1), 0, -sth, 0, cth;
     Eigen::Matrix<Scalar, 3, 3> Rz;
     Rz << cy, -sy, 0, sy, cy, 0, 0, 0, Scalar(1);
 
     Eigen::Matrix<Scalar, 3, 3> dRx;
-    dRx << 0, 0, 0, 0, -sp, -cp, 0, cp, -sp;
+    dRx << 0, 0, 0, 0, -sr, -cr, 0, cr, -sr;
+    // dRy/d(theta): Ry(theta + eps) - Ry(theta) over eps: the cos entries differentiate to
+    // -sin(theta) = -sth (NOT -sin(roll)!). This was R1-2's critical bug.
     Eigen::Matrix<Scalar, 3, 3> dRy;
-    dRy << -st, 0, cp, 0, 0, 0, -cp, 0, -st;
+    dRy << -sth, 0, cth, 0, 0, 0, -cth, 0, -sth;
     Eigen::Matrix<Scalar, 3, 3> dRz;
     dRz << -sy, -cy, 0, cy, -sy, 0, 0, 0, 0;
 
@@ -387,15 +426,15 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
       (Scalar(1) / m) * (dR_dpsi * t - R * (D.cwiseProduct(dR_dpsi.transpose() * v)));
 
     // rpy_dot wrt rpy:  M_ik = sum_j dT_ij/drpy_k * w_j.
-    const Scalar ct2 = ct * ct;
+    const Scalar cth2 = cth * cth;
     Eigen::Matrix<Scalar, 3, 3> dT_dphi;
-    dT_dphi << 0, cp * st / ct, -sp * st / ct,
-               0, -sp, -cp,
-               0, cp / ct, -sp / ct;
+    dT_dphi << 0, cr * sth / cth, -sr * sth / cth,
+               0, -sr, -cr,
+               0, cr / cth, -sr / cth;
     Eigen::Matrix<Scalar, 3, 3> dT_dtheta;
-    dT_dtheta << 0, sp / ct2, cp / ct2,
+    dT_dtheta << 0, sr / cth2, cr / cth2,
                  0, 0, 0,
-                 0, sp * st / ct2, cp * st / ct2;
+                 0, sr * sth / cth2, cr * sth / cth2;
     Eigen::Matrix<Scalar, 3, 3> M;
     M.col(0) = dT_dphi * w;
     M.col(1) = dT_dtheta * w;
@@ -403,11 +442,10 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     A->template block<3, 3>(kAtt, kAtt) = M;
 
     // rpy_dot wrt omega: T(rpy).
-    const Scalar sphi = sp, cphi = cp;  // aliases for readability
     Eigen::Matrix<Scalar, 3, 3> T;
-    T << Scalar(1), sphi * st / ct, cphi * st / ct,
-         Scalar(0), cphi, -sphi,
-         Scalar(0), sphi / ct, cphi / ct;
+    T << Scalar(1), sr * sth / cth, cr * sth / cth,
+         Scalar(0), cr, -sr,
+         Scalar(0), sr / cth, cr / cth;
     A->template block<3, 3>(kAtt, kRate) = T;
   }
 
@@ -525,14 +563,15 @@ Eigen::Matrix<Scalar, 3, 1> quatToEulerZyx(const Eigen::Quaternion<Scalar> & q)
 template<typename Scalar>
 Eigen::Quaternion<Scalar> eulerZyxToQuat(const Eigen::Matrix<Scalar, 3, 1> & rpy)
 {
+  // Same naming convention as eulerRotationZyx / jacobians: cth/sth = cos/sin(pitch/2).
   const Scalar cr = std::cos(rpy(0) / Scalar(2)), sr = std::sin(rpy(0) / Scalar(2));
-  const Scalar cp = std::cos(rpy(1) / Scalar(2)), sp = std::sin(rpy(1) / Scalar(2));
+  const Scalar cth = std::cos(rpy(1) / Scalar(2)), sth = std::sin(rpy(1) / Scalar(2));
   const Scalar cy = std::cos(rpy(2) / Scalar(2)), sy = std::sin(rpy(2) / Scalar(2));
   return Eigen::Quaternion<Scalar>(
-    cr * cp * cy + sr * sp * sy,
-    sr * cp * cy - cr * sp * sy,
-    cr * sp * cy + sr * cp * sy,
-    cr * cp * sy - sr * sp * cy);
+    cr * cth * cy + sr * sth * sy,
+    sr * cth * cy - cr * sth * sy,
+    cr * sth * cy + sr * cth * sy,
+    cr * cth * sy - sr * sth * cy);
 }
 
 Eigen::Vector3d enuToNed(const Eigen::Vector3d & v_enu)

@@ -68,6 +68,9 @@ enum class ControllerState
 class NmpcNode : public rclcpp_lifecycle::LifecycleNode
 {
 public:
+  using StateVec = QuadrotorDynamics<double, AttitudeRep::Quaternion>::StateVector;
+  using InputVec = QuadrotorDynamics<double, AttitudeRep::Quaternion>::InputVector;
+public:
   explicit NmpcNode(const rclcpp::NodeOptions & options);
   ~NmpcNode() override;
 
@@ -119,12 +122,12 @@ private:
   void controlLoop();
 
   /// Build the solver state vector from the cached PX4 messages, in the active AttitudeRep.
-  /// Returns false if any source is stale beyond `state_timeout_`.
-  bool assembleState(Eigen::VectorXd * x0, std::string * why_stale);
+  /// Returns false if any source is stale beyond `state_timeout_`.  REVIEW R1-7: fixed-size.
+  bool assembleState(StateVec * x0, std::string * why_stale);
 
   /// Forward-integrate x0 by the measured sensor+actuator latency using the last applied input,
   /// so the OCP starts from where the vehicle will be when the command lands.
-  Eigen::VectorXd compensateLatency(const Eigen::VectorXd & x0, double latency_s) const;
+  StateVec compensateLatency(const StateVec & x0, double latency_s) const;  // REVIEW R1-7: fixed-size
 
   /// u0 [per-rotor thrust, N] -> frame-neutral attitude+thrust command (ENU/FLU). The attitude
   /// is the optimiser's intent at stage 1, which already accounts for the rate dynamics (§7.6).
@@ -155,7 +158,12 @@ private:
 
   /// Overrides the reference horizon with a vertical position ramp for Takeoff/Landing (§7.3).
   void fillTakeoffLandingHorizon(
-    ControllerState state, const Eigen::VectorXd & x0, double dt, int n, double hover_thrust_n);
+    ControllerState state, const Eigen::VectorXd & x0, double dt, int n,
+    double hover_thrust_per_rotor_n);
+
+  /// Test fixture (test/test_nmpc_node.cpp) drives the state machine and the private
+  /// thrust/horizon helpers directly — it must not spin an executor or fake a backend.
+  friend class NmpcNodeTest;
 
   // --- vehicle backend (owns all autopilot-specific pubs/subs) ----------------------------------
   std::unique_ptr<VehicleInterface> vehicle_;
@@ -196,12 +204,13 @@ private:
   std::atomic<bool> landing_requested_{false};
   rclcpp::Time trajectory_start_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_tick_time_{0, 0, RCL_ROS_TIME};
-  Eigen::VectorXd last_applied_input_{};
-  Eigen::VectorXd last_x0_{};      ///< last assembled state, for failsafe resetToHover
+  InputVec last_applied_input_{InputVec::Zero()};
+  StateVec last_x0_{StateVec::Zero()};      ///< last assembled state, for failsafe resetToHover
   Eigen::Quaterniond last_q_d_enu_{Eigen::Quaterniond::Identity()};  ///< last sent setpoint attitude
+  StateVec x0_scratch_{StateVec::Zero()};  ///< pre-sized scratch (no alloc in loop)  REVIEW R1-7
   int offboard_stream_counter_{0};
   int consecutive_solver_failures_{0};
-  double hover_thrust_n_{0.0};   ///< [N] per-rotor hover thrust, m*g/4 — solver seed + takeoff ref
+  double hover_thrust_per_rotor_n_{0.0};  ///< [N] per-rotor hover thrust, m*g/4 — solver seed + takeoff ref
 
   // --- reference buffers (pre-sized in on_configure; NO allocation inside the control loop) -----
   std::vector<Eigen::VectorXd> x_refs_;   ///< N+1 states

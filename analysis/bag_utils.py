@@ -19,8 +19,10 @@ import sys
 
 # uav_mpc message dependencies, in registration order (SolverDiagnostics is referenced by
 # NmpcStatus and must be registered first).
-UAV_MPC_MSGS = ("SolverDiagnostics", "NmpcStatus")
+UAV_MPC_MSGS = ("SolverDiagnostics", "NmpcStatus", "AttitudeThrustSetpoint")
 PX4_MSGS = ("VehicleLocalPosition", "VehicleAttitude", "VehicleAttitudeSetpoint")
+# Standard ROS 2 messages needed by the generic backend.
+NAV_MSGS = ("Odometry",)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -71,7 +73,14 @@ def find_px4_msgs_msg_dir() -> Path:
 
 
 def build_typestore():
-    """Typestore with uav_mpc and px4_msgs custom types registered (ROS 2 distro defaults)."""
+    """Typestore with uav_mpc and px4_msgs custom types registered (ROS 2 distro defaults).
+
+    px4_msgs registration is best-effort: if the message definitions cannot be located
+    (e.g. the workspace was built without px4_msgs), it logs a warning and continues
+    with only the uav_mpc + nav_msgs types.  REVIEW R1-14.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
     _, _, Stores, get_typestore, get_types_from_msg = _rosbags()
     typestore = get_typestore(Stores.ROS2_HUMBLE)
 
@@ -81,7 +90,21 @@ def build_typestore():
             typestore.register(get_types_from_msg(path.read_text(), f"{prefix}/{name}"))
 
     register(REPO_ROOT / "uav_mpc" / "msg", "uav_mpc/msg", UAV_MPC_MSGS)
-    register(find_px4_msgs_msg_dir(), "px4_msgs/msg", PX4_MSGS)
+
+    # px4_msgs: optional.  REVIEW R1-14.
+    try:
+        register(find_px4_msgs_msg_dir(), "px4_msgs/msg", PX4_MSGS)
+    except FileNotFoundError as e:
+        _log.warning("px4_msgs not found (%s); PX4-specific topics will not be deserialised", e)
+
+    # Standard nav_msgs types for the generic backend.  REVIEW R1-14.
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        nav_dir = Path(get_package_share_directory("nav_msgs")) / "msg"
+        register(nav_dir, "nav_msgs/msg", NAV_MSGS)
+    except Exception:
+        _log.debug("nav_msgs/Odometry registration skipped (ament_index unavailable)")
+
     return typestore
 
 

@@ -140,6 +140,24 @@ private:
   void buildAllocationMatrix();
 };
 
+/// Lightweight control-allocation helper — holds only the cached inverse of the quad-X mixer
+/// and the rotor thrust bounds.  This lets hot-path callers (trajectory horizon sampling) avoid
+/// constructing a full {QuadrotorDynamics} (which LDLT-factors the inertia tensor) when all they
+/// need is the allocation map.  REVIEW R1-6.
+struct ControlAllocation
+{
+  Eigen::Matrix<double, 4, 4> inverse{Eigen::Matrix<double, 4, 4>::Zero()};
+  double min_thrust_per_rotor{0.0};
+  double max_thrust_per_rotor{0.0};
+
+  static ControlAllocation fromParams(const QuadrotorParams & params);
+
+  /// Inverse allocation, clamped to [min_thrust_per_rotor, max_thrust_per_rotor].
+  /// Returns false if the request was infeasible and had to be clamped.
+  bool allocateInverse(double collective_thrust, const Eigen::Vector3d & torque,
+    Eigen::Vector4d * u) const;
+};
+
 // ---------------------------------------------------------------------------------------------
 // Free helpers shared with trajectory_generator (differential flatness map).
 // ---------------------------------------------------------------------------------------------

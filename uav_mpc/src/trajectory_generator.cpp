@@ -253,6 +253,14 @@ std::vector<FlatState> TrajectoryGenerator::sampleHorizon(
 StateInputReference TrajectoryGenerator::flatToStateInput(
   const FlatState & flat, const QuadrotorParams & airframe, AttitudeRep rep)
 {
+  // Delegate to the non-allocating overload (REVIEW R1-6).
+  return flatToStateInput(flat, airframe, ControlAllocation::fromParams(airframe), rep);
+}
+
+StateInputReference TrajectoryGenerator::flatToStateInput(
+  const FlatState & flat, const QuadrotorParams & airframe,
+  const ControlAllocation & alloc, AttitudeRep rep)
+{
   using Vec3 = Eigen::Vector3d;
 
   const double g = airframe.gravity;
@@ -300,8 +308,7 @@ StateInputReference TrajectoryGenerator::flatToStateInput(
       ref.state.segment<3>(6) = rpy;
       ref.state.segment<3>(9) = omega;
     }
-    QuadrotorDynamics<double, AttitudeRep::Quaternion> dyn(airframe);
-    dyn.allocateInverse(0.0, Vec3::Zero(), &ref.input);  // clamps to [min, max]
+    alloc.allocateInverse(0.0, Vec3::Zero(), &ref.input);  // clamped to [min, max]  REVIEW R1-6
     return ref;
   }
 
@@ -396,8 +403,7 @@ StateInputReference TrajectoryGenerator::flatToStateInput(
     ref.state.segment<3>(9) = omega;
   }
 
-  QuadrotorDynamics<double, AttitudeRep::Quaternion> dyn(airframe);
-  dyn.allocateInverse(T, tau, &ref.input);  // clamped to [min, max]
+  alloc.allocateInverse(T, tau, &ref.input);  // clamped to [min, max]  REVIEW R1-6
   return ref;
 }
 
@@ -407,8 +413,11 @@ std::vector<StateInputReference> TrajectoryGenerator::referenceHorizon(
   std::vector<StateInputReference> out;
   out.reserve(static_cast<std::size_t>(n_steps) + 1);
   const std::vector<FlatState> flats = sampleHorizon(t0, dt, n_steps);
+  // Pre-build the allocation map once; saves one QuadrotorDynamics construction
+  // (LDLT factorisation) per horizon point.  REVIEW R1-6.
+  const ControlAllocation alloc = ControlAllocation::fromParams(airframe);
   for (const FlatState & f : flats) {
-    out.push_back(flatToStateInput(f, airframe, rep));
+    out.push_back(flatToStateInput(f, airframe, alloc, rep));
   }
   return out;
 }

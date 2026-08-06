@@ -13,32 +13,31 @@ airframe:
   verified: false            # UNVERIFIED: flip to true once cross-checked
 
   # --- mass properties ---------------------------------------------------------------------
-  mass: 2.0                   # [kg] airframe + 4S 5000 mAh; SITL model uses 2.0
+  mass: 2.0                   # [kg] airframe + 4S 5000 mAh; SITL model uses 2.0  # SDF
   inertia:                    # [kg m^2] body frame, FLU; diagonal is adequate for a symmetric X
-    ixx: 0.02166
-    iyy: 0.02166
-    izz: 0.04000
-    ixy: 0.0
-    ixz: 0.0
-    iyz: 0.0
+    ixx: 0.02166              # SDF
+    iyy: 0.02166              # SDF
+    izz: 0.04000              # SDF
+    ixy: 0.0                  # SDF (symmetry)
+    ixz: 0.0                  # SDF (symmetry)
+    iyz: 0.0                  # SDF (symmetry)
 
   # --- geometry ------------------------------------------------------------------------------
-  arm_length: 0.25            # [m] CoG to motor axis, in-plane. X500 has a 500 mm wheelbase.
-  rotor_configuration: "quad_x"
+  arm_length: 0.25            # [m] CoG to motor axis, in-plane. X500 has a 500 mm wheelbase.  # UNVERIFIED — check datasheet
 
   # --- propulsion ----------------------------------------------------------------------------
   # T_i = thrust_coeff * omega_i^2 ,  Q_i = torque_coeff * omega_i^2
-  thrust_coeff: 8.54858e-06   # [N/(rad/s)^2]  motorConstant in the SITL SDF
-  torque_coeff: 1.3677728e-07 # [N m/(rad/s)^2] = thrust_coeff * momentConstant(0.016)
-  max_rotor_speed: 1000.0     # [rad/s]
-  min_thrust_per_rotor: 0.5   # [N] keep the props spinning
-  max_thrust_per_rotor: 8.55  # [N] = thrust_coeff * max_rotor_speed^2
-  rotor_time_constant: 0.0125 # [s] first-order motor+ESC lag
+  thrust_coeff: 8.54858e-06   # [N/(rad/s)^2]  motorConstant in the SITL SDF  # SDF
+  torque_coeff: 1.3677728e-07 # [N m/(rad/s)^2] = thrust_coeff * momentConstant(0.016)  # derived from thrust_coeff
+  max_rotor_speed: 1000.0     # [rad/s]  # SDF
+  min_thrust_per_rotor: 0.5   # [N] keep the props spinning  # UNVERIFIED — idle thrust not in SDF
+  max_thrust_per_rotor: 8.55  # [N] = thrust_coeff * max_rotor_speed^2  # derived
+  rotor_time_constant: 0.0125 # [s] first-order motor+ESC lag  # UNVERIFIED — rough estimate, needs identification
 
   # Thrust-to-weight = 4 * 8.55 / (2.0 * 9.80665) = 1.74. Adequate for the 3 m / 5 s figure-8.
 
   # --- aerodynamics --------------------------------------------------------------------------
-  drag_coeff: [0.10, 0.10, 0.05]  # [N s/m] linear rotor drag, body frame. Rough estimate —
+  drag_coeff: [0.10, 0.10, 0.05]  # [N s/m] linear rotor drag, body frame.  # UNVERIFIED — rough estimate
                                   # identify from a constant-velocity flight (TUNING_GUIDE §5).
 
   gravity: 9.80665            # [m/s^2]

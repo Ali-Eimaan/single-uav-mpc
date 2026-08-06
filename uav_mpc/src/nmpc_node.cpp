@@ -114,7 +114,7 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
     return CallbackReturn::FAILURE;
   }
   model_ = std::make_unique<QuadrotorDynamics<double, AttitudeRep::Quaternion>>(airframe_);
-  hover_thrust_n_ = model_->hoverThrustPerRotor();
+  hover_thrust_per_rotor_n_ = model_->hoverThrustPerRotor();
 
   // --- trajectory ---------------------------------------------------------------------------
   try {
@@ -136,8 +136,8 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   const int nx = solver_->nx();
   x_refs_.assign(static_cast<std::size_t>(n) + 1, Eigen::VectorXd(nx));
   u_refs_.assign(static_cast<std::size_t>(n), Eigen::VectorXd(solver_->nu()));
-  last_applied_input_ = Eigen::VectorXd::Zero(solver_->nu());
-  last_x0_ = Eigen::VectorXd::Zero(nx);
+  last_applied_input_ = InputVec::Zero();   // REVIEW R1-7: fixed-size
+  last_x0_ = StateVec::Zero();               // REVIEW R1-7: fixed-size
   // Online parameters stay constant in this version: no wind estimate, nominal mass, level
   // quaternion reference for the geometric attitude error.
   Eigen::VectorXd p = Eigen::VectorXd::Zero(solver_->np());
@@ -172,7 +172,7 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   srv_set_trajectory_ = create_service<uav_mpc::srv::SetTrajectory>(
     "~/set_trajectory",
     std::bind(&NmpcNode::onSetTrajectory, this, std::placeholders::_1, std::placeholders::_2),
-    rmw_qos_profile_services_default, telemetry_callback_group_);
+    rclcpp::ServicesQoS(), telemetry_callback_group_);
 
   // --- parameter callback ---------------------------------------------------------------------
   param_callback_handle_ = this->add_on_set_parameters_callback(
@@ -181,7 +181,8 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   RCLCPP_INFO(get_logger(),
     "configured: backend=%s airframe=%s N=%d Tf=%.2f nx=%d nu=%d np=%d hover=%.4f N",
     vehicle_->name().c_str(), airframe_.frame_name.c_str(), solver_config_.horizon_steps,
-    solver_config_.horizon_time, solver_->nx(), solver_->nu(), solver_->np(), hover_thrust_n_);
+    solver_config_.horizon_time, solver_->nx(), solver_->nu(), solver_->np(),
+    hover_thrust_per_rotor_n_);
   if (!vehicle_->hasAutopilotHandshake()) {
     RCLCPP_WARN(get_logger(),
       "backend '%s' has no arm/offboard handshake: the controller assumes it always has "
@@ -396,11 +397,11 @@ bool NmpcNode::loadParameters(std::string * error)
   vehicle_interface_kind_ = get_parameter("vehicle_interface").as_string();
 
   // --- solver config -------------------------------------------------------------------------
-  solver_config_.horizon_steps = get_parameter("horizon_steps").as_int();
+  solver_config_.horizon_steps = static_cast<int>(get_parameter("horizon_steps").as_int());
   solver_config_.horizon_time = get_parameter("horizon_time").as_double();
-  solver_config_.max_sqp_iterations = get_parameter("max_sqp_iterations").as_int();
+  solver_config_.max_sqp_iterations = static_cast<int>(get_parameter("max_sqp_iterations").as_int());
   solver_config_.solve_time_budget_ms = get_parameter("solve_time_budget_ms").as_double();
-  solver_config_.max_consecutive_failures = get_parameter("max_consecutive_failures").as_int();
+  solver_config_.max_consecutive_failures = static_cast<int>(get_parameter("max_consecutive_failures").as_int());
   solver_config_.warm_start = get_parameter("warm_start").as_bool();
   solver_config_.shift_on_warm_start = get_parameter("shift_on_warm_start").as_bool();
   const auto q = get_parameter("q_diag").as_double_array();
@@ -752,9 +753,12 @@ void NmpcNode::controlLoop()
     ? 0.0 : (now - last_tick_time_).seconds() * 1e3;
   last_tick_time_ = now;
   const auto t_start = std::chrono::steady_clock::now();
+  // Lyrical's RCLCPP_*_THROTTLE expands to a lambda that reference-captures the clock, which
+  // cannot bind the prvalue returned by get_clock() — hoist it to a named variable first.
+  const auto clock = get_clock();
 
   // --- 1. staleness check -> Failsafe ---------------------------------------------------------
-  Eigen::VectorXd x0;
+  StateVec x0;  // REVIEW R1-7: fixed-size, no dynamic allocation
   std::string why;
   if (!assembleState(&x0, &why)) {
     enterFailsafe(why);
@@ -766,7 +770,13 @@ void NmpcNode::controlLoop()
   // --- 2. state machine -----------------------------------------------------------------------
   updateControllerState();
   const ControllerState state = controller_state_.load();
-  if (state == ControllerState::Idle) {return;}  // deactivated between ticks: stay silent
+  // Idle deliberately withholds the OffboardControlMode heartbeat (§7.4 step 10 normally runs
+  // unconditionally). Two reasons: (a) the timer should not be running in Idle at all — the
+  // state is only reachable mid-shutdown (backend already deactivated -> publishing to a
+  // deactivated lifecycle publisher aborts) or after landing, where letting PX4's offboard-loss
+  // failsafe lapse is exactly what we want rather than keeping it alive with a stale-mode
+  // heartbeat; (b) there are no setpoints to stream anyway. Every other state publishes it.
+  if (state == ControllerState::Idle) {return;}
 
   // --- 3. latency compensation ----------------------------------------------------------------
   x0 = compensateLatency(x0, latency_compensation_s_);
@@ -775,7 +785,7 @@ void NmpcNode::controlLoop()
   const int n = solver_config_.horizon_steps;
   const double dt = solver_config_.horizon_time / static_cast<double>(n);
   if (state == ControllerState::Takeoff || state == ControllerState::Landing) {
-    fillTakeoffLandingHorizon(state, x0, dt, n, hover_thrust_n_);
+    fillTakeoffLandingHorizon(state, x0, dt, n, hover_thrust_per_rotor_n_);
   } else {
     std::lock_guard<std::mutex> lk(trajectory_mutex_);
     const double t_traj = (now - trajectory_start_time_).seconds();
@@ -796,7 +806,7 @@ void NmpcNode::controlLoop()
     consecutive_solver_failures_ = 0;
   } else {
     ++consecutive_solver_failures_;
-    RCLCPP_WARN_THROTTLE(get_logger(), get_clock(), 1000,
+    RCLCPP_WARN_THROTTLE(get_logger(), *clock, 1000,
       "solver failure #%d (status %d)", consecutive_solver_failures_,
       static_cast<int>(result.status));
     if (consecutive_solver_failures_ >= solver_config_.max_consecutive_failures) {
@@ -828,13 +838,13 @@ void NmpcNode::controlLoop()
   const auto t_end = std::chrono::steady_clock::now();
   loop_duration_ms_ = std::chrono::duration<double, std::milli>(t_end - t_start).count();
   if (loop_duration_ms_ > log_solve_time_warn_ms_) {
-    RCLCPP_WARN_THROTTLE(get_logger(), get_clock(), 1000,
+    RCLCPP_WARN_THROTTLE(get_logger(), *clock, 1000,
       "control tick took %.2f ms (warn threshold %.2f ms)", loop_duration_ms_,
       log_solve_time_warn_ms_);
   }
 }
 
-bool NmpcNode::assembleState(Eigen::VectorXd * x0, std::string * why_stale)
+bool NmpcNode::assembleState(StateVec * x0, std::string * why_stale)
 {
   using Layout = StateLayout<AttitudeRep::Quaternion>;
   const rclcpp::Time now = this->now();
@@ -855,18 +865,16 @@ bool NmpcNode::assembleState(Eigen::VectorXd * x0, std::string * why_stale)
     return false;
   }
 
-  Eigen::VectorXd x(Layout::kNx);
-  x.segment<3>(Layout::kPosIdx) = position_enu_;
-  x.segment<3>(Layout::kVelIdx) = velocity_enu_;
-  x.segment<4>(Layout::kAttIdx) <<
+  x0->segment<3>(Layout::kPosIdx) = position_enu_;
+  x0->segment<3>(Layout::kVelIdx) = velocity_enu_;
+  x0->segment<4>(Layout::kAttIdx) <<
     attitude_enu_flu_.w(), attitude_enu_flu_.x(), attitude_enu_flu_.y(), attitude_enu_flu_.z();
-  x.segment<3>(Layout::kRateIdx) = body_rates_flu_;
-  *x0 = std::move(x);
+  x0->segment<3>(Layout::kRateIdx) = body_rates_flu_;
   return true;
 }
 
-Eigen::VectorXd NmpcNode::compensateLatency(
-  const Eigen::VectorXd & x0, double latency_s) const
+NmpcNode::StateVec NmpcNode::compensateLatency(
+  const StateVec & x0, double latency_s) const
 {
   using Dyn = QuadrotorDynamics<double, AttitudeRep::Quaternion>;
   if (latency_s <= 0.0 || last_applied_input_.size() != Dyn::kNu) {return x0;}
@@ -916,7 +924,8 @@ double NmpcNode::normaliseThrust(double collective_thrust_newton) const
 }
 
 void NmpcNode::fillTakeoffLandingHorizon(
-  ControllerState state, const Eigen::VectorXd & x0, double dt, int n, double hover_thrust_n)
+  ControllerState state, const Eigen::VectorXd & x0, double dt, int n,
+  double hover_thrust_per_rotor_n)
 {
   using Layout = StateLayout<AttitudeRep::Quaternion>;
   const double z_start = x0(Layout::kPosIdx + 2);
@@ -942,7 +951,7 @@ void NmpcNode::fillTakeoffLandingHorizon(
     // slot. Writing to kAttIdx + 3 would set qz = 1, i.e. a 180-degree yaw reference.
     xr(Layout::kAttIdx) = 1.0;
     if (k < n) {
-      u_refs_[static_cast<std::size_t>(k)].setConstant(hover_thrust_n);
+      u_refs_[static_cast<std::size_t>(k)].setConstant(hover_thrust_per_rotor_n);
     }
   }
 }
@@ -995,7 +1004,10 @@ void NmpcNode::updateControllerState()
         p = position_enu_;
         v = velocity_enu_;
       }
-      if (std::abs(p.z() - takeoff_altitude_m_) < kTakeoffZWindowM && v.norm() < kLandingVThresholdMps) {
+      // REVIEW R1-9: the velocity gate is the TAKEOFF threshold, not the landing one — they
+      // happened to be equal (0.2) so this was invisible until one of them changed.
+      if (std::abs(p.z() - takeoff_altitude_m_) < kTakeoffZWindowM &&
+          v.norm() < kTakeoffVThresholdMps) {
         controller_state_.store(ControllerState::Tracking);
         RCLCPP_INFO(get_logger(), "takeoff complete — tracking the active trajectory");
       }
@@ -1022,6 +1034,10 @@ void NmpcNode::updateControllerState()
         v = velocity_enu_;
       }
       if (p.z() < kLandingZThresholdM && v.norm() < kLandingVThresholdMps) {
+        // REVIEW R1-12: clear the landing latch when the mission actually completes, so a
+        // later re-activation (Streaming -> Takeoff -> Tracking) does not instantly re-trigger
+        // Landing from a stale flag. on_activate also clears it; this is the in-loop safety.
+        landing_requested_.store(false);
         controller_state_.store(ControllerState::Idle);
         requestDisarm();
         RCLCPP_INFO(get_logger(), "landed — controller idle");
@@ -1037,22 +1053,22 @@ void NmpcNode::updateControllerState()
 void NmpcNode::enterFailsafe(const std::string & reason)
 {
   controller_state_.store(ControllerState::Failsafe);
-  RCLCPP_ERROR_THROTTLE(get_logger(), get_clock(), 1000, "FAILSAFE: %s", reason.c_str());
+  const auto clock = get_clock();  // hoisted: the throttle macro reference-captures the clock
+  RCLCPP_ERROR_THROTTLE(get_logger(), *clock, 1000, "FAILSAFE: %s", reason.c_str());
 
   // Reset the solver guess so a recovery solve has a sane starting point.
   if (solver_ && solver_->isInitialised() && last_x0_.size() == solver_->nx()) {
-    solver_->resetToHover(last_x0_, hover_thrust_n_);
+    solver_->resetToHover(last_x0_, hover_thrust_per_rotor_n_);
   }
 
-  // Level attitude + hover thrust, straight to PX4 (bypasses the NMPC entirely).
   // Level attitude + hover thrust, straight to the backend (bypasses the NMPC entirely).
-  // hover_thrust_n_ is PER ROTOR; the collective thrust is four times that.
+  // hover_thrust_per_rotor_n_ is PER ROTOR; the collective thrust is four times that.
   AttitudeThrustCommand sp;
   sp.attitude_enu_flu = Eigen::Quaterniond::Identity();
-  sp.collective_thrust_newton = 4.0 * hover_thrust_n_;
+  sp.collective_thrust_newton = 4.0 * hover_thrust_per_rotor_n_;
   sp.normalised_thrust = normaliseThrust(sp.collective_thrust_newton);
   sp.yaw_rate_feedforward = 0.0;
-  sp.rotor_thrust_newton.setConstant(hover_thrust_n_);
+  sp.rotor_thrust_newton.setConstant(hover_thrust_per_rotor_n_);
   if (vehicle_) {vehicle_->publishSetpoint(sp);}
 }
 
@@ -1094,7 +1110,13 @@ void NmpcNode::publishStatus(const SolveResult & result, const Eigen::VectorXd &
     const double qw = x_refs_.front()(Layout::kAttIdx);
     const double qz = x_refs_.front()(Layout::kAttIdx + 3);
     const double ref_yaw = std::atan2(2.0 * (qw * qz), 1.0 - 2.0 * qz * qz);
-    const Eigen::Quaterniond q_meas = attitude_enu_flu_;
+    // REVIEW R1-8: attitude_enu_flu_ is written by onOdometry under state_mutex_; read it under
+    // the same lock instead of tearing a quaternion across a data race with the control thread.
+    Eigen::Quaterniond q_meas;
+    {
+      std::lock_guard<std::mutex> lk(state_mutex_);
+      q_meas = attitude_enu_flu_;
+    }
     const double meas_yaw = std::atan2(
       2.0 * (q_meas.w() * q_meas.z()), 1.0 - 2.0 * q_meas.z() * q_meas.z());
     msg.yaw_error = wrapPi(ref_yaw - meas_yaw);

@@ -37,12 +37,16 @@
 #error "UAV_MPC_CODEGEN_DIR must be defined (set in CMakeLists.txt)"
 #endif
 
+// REVIEW R1-13: the budgets are the A2 acceptance criteria, generated at configure time from
+// acceptance_criteria.yaml (the single source of truth). Do not edit them here.
+#include "acceptance_criteria.h"
+
 namespace
 {
 
 /// Budget at 100 Hz. The solve must fit with room for the rest of the callback.
-constexpr double kP99BudgetMs = 2.0;
-constexpr double kMedianBudgetMs = 1.0;
+constexpr double kP99BudgetMs = uav_mpc::acceptance::kSolveP99BudgetMs;
+constexpr double kMedianBudgetMs = uav_mpc::acceptance::kSolveMedianBudgetMs;
 constexpr int kSamples = 10000;
 constexpr int kWarmUpSolves = 100;
 
