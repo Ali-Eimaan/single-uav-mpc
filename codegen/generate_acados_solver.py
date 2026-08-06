@@ -510,6 +510,7 @@ def _symlink_hashed_outputs(gen_dir: Path) -> None:
 
 #include "acados_solver_quadrotor.h"
 
+// Dimension macros
 #define QUADROTOR_NX  ({suffix}NX)
 #define QUADROTOR_NU  ({suffix}NU)
 #define QUADROTOR_NP  ({suffix}NP)
@@ -519,6 +520,23 @@ def _symlink_hashed_outputs(gen_dir: Path) -> None:
 #define QUADROTOR_NBU ({suffix}NBU)
 #define QUADROTOR_NY  ({suffix}NY)
 #define QUADROTOR_NYN ({suffix}NYN)
+
+// Function and type aliases — acados 0.6.0 hashes every entry point.
+#define quadrotor_solver_capsule       ocp_quadrotor_{hash_str}_solver_capsule
+#define quadrotor_acados_create_capsule  ocp_quadrotor_{hash_str}_acados_create_capsule
+#define quadrotor_acados_free_capsule    ocp_quadrotor_{hash_str}_acados_free_capsule
+#define quadrotor_acados_create          ocp_quadrotor_{hash_str}_acados_create
+#define quadrotor_acados_solve           ocp_quadrotor_{hash_str}_acados_solve
+#define quadrotor_acados_free            ocp_quadrotor_{hash_str}_acados_free
+#define quadrotor_acados_update_params   ocp_quadrotor_{hash_str}_acados_update_params
+#define quadrotor_acados_get_nlp_config  ocp_quadrotor_{hash_str}_acados_get_nlp_config
+#define quadrotor_acados_get_nlp_dims    ocp_quadrotor_{hash_str}_acados_get_nlp_dims
+#define quadrotor_acados_get_nlp_in      ocp_quadrotor_{hash_str}_acados_get_nlp_in
+#define quadrotor_acados_get_nlp_out     ocp_quadrotor_{hash_str}_acados_get_nlp_out
+#define quadrotor_acados_get_nlp_solver  ocp_quadrotor_{hash_str}_acados_get_nlp_solver
+#define quadrotor_acados_get_nlp_opts    ocp_quadrotor_{hash_str}_acados_get_nlp_opts
+#define quadrotor_acados_print_stats     ocp_quadrotor_{hash_str}_acados_print_stats
+#define quadrotor_acados_reset           ocp_quadrotor_{hash_str}_acados_reset
 
 #endif  // ACADOS_SOLVER_COMPAT_H_
 """)

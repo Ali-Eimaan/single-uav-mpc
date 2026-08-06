@@ -63,6 +63,8 @@ struct SolverConfig
   int max_consecutive_failures{5};      ///< beyond this, nmpc_node aborts to PX4 failsafe
   bool warm_start{true};
   bool shift_on_warm_start{true};       ///< shift the previous solution one stage forward
+  ///< per-rotor hover thrust [N]; seeds recovery guess (R2-16)
+  double hover_thrust_per_rotor{0.0};
 };
 
 /// Non-copyable, movable RAII handle on the generated solver.

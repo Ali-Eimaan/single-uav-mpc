@@ -40,6 +40,7 @@
 #include "acados_c/ocp_nlp_interface.h"
 #include "acados_solver_compat.h"   // NOLINT(build/include_subdir)
 #include "acados_solver_quadrotor.h"   // NOLINT(build/include_subdir)
+#include "model_hash.h"             // NOLINT(build/include_subdir)
 // clang-format on
 #endif
 
@@ -48,6 +49,15 @@ namespace uav_mpc
 
 namespace
 {
+
+/// Trims whitespace from both ends of a string. Used by the model-hash check.
+inline std::string trim(const std::string & s)
+{
+  const auto start = s.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) {return {};}
+  const auto end = s.find_last_not_of(" \t\r\n");
+  return s.substr(start, end - start + 1);
+}
 
 /// Stub-build layout defaults. The real values come from the generated code (QUADROTOR_NX
 /// etc.); the stub only needs sizes that keep tests linking.
@@ -167,7 +177,8 @@ bool AcadosWrapper::initialise(const SolverConfig & config, std::string * error)
       "'. Re-run codegen/generate_acados_solver.py (--check-only in CI) before flying.");
   }
 
-  impl_->lam_size = ocp_nlp_dims_get_from_ocp_nlp_dims(impl_->nlp_dims, "lam", 0);
+  impl_->lam_size = ocp_nlp_dims_get_from_attr(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_out, 0, "lam");
   if (impl_->lam_size <= 0) {impl_->lam_size = nx_ + nu_ + 8;}  // defensive fallback
 #else
   nx_ = kStubNx;
@@ -181,7 +192,7 @@ bool AcadosWrapper::initialise(const SolverConfig & config, std::string * error)
   impl_->u_buffer.assign(static_cast<std::size_t>(nu_), 0.0);
   impl_->zero_buffer.assign(static_cast<std::size_t>(nx_ + nu_ + 8), 0.0);
   impl_->x0 = Eigen::VectorXd::Zero(nx_);
-  impl_->hover_thrust = 0.0;
+  impl_->hover_thrust = config.hover_thrust_per_rotor;
 
   config_ = config;
   initialised_ = true;
@@ -197,10 +208,14 @@ bool AcadosWrapper::initialise(const SolverConfig & config, std::string * error)
   }
 
 #ifdef UAV_MPC_WITH_ACADOS
-  // Zero the online parameter vector on every stage (p = [wind(3) mass_scale q_ref(4)]).
+  // Seed the online parameter vector: mass_scale and q_ref.w must be 1.0 so the
+  // solver is well-posed from the first call (§4). Zero wind, zero attitude error.
   Eigen::VectorXd p0 = Eigen::VectorXd::Zero(np_);
+  p0(3) = 1.0;   // mass_scale — dynamics divide by this, so 0 → NaN
+  p0(4) = 1.0;   // q_ref.w — quaternion reference scalar part
   for (int stage = 0; stage < QUADROTOR_N; ++stage) {
-    quadrotor_acados_update_params(impl_->capsule, stage, p0.data(), np_);
+    quadrotor_acados_update_params(impl_->capsule, stage,
+      const_cast<double *>(p0.data()), np_);
   }
 #endif
 
@@ -237,8 +252,11 @@ void AcadosWrapper::setInitialState(const Eigen::VectorXd & x0)
   if (!initialised_ || x0.size() != nx_) {return;}
 #ifdef UAV_MPC_WITH_ACADOS
   // Initial-state equality: lbx_0 = ubx_0 = x0 (§6.4).
-  ocp_nlp_constraints_model_set(impl_->nlp_in, 0, "lbx_0", x0.data());
-  ocp_nlp_constraints_model_set(impl_->nlp_in, 0, "ubx_0", x0.data());
+  // acados 0.6.0: stage-0 bounds use "lbx"/"ubx", not "lbx_0"/"ubx_0".
+  ocp_nlp_constraints_model_set(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_in, impl_->nlp_out, 0, "lbx", const_cast<double *>(x0.data()));
+  ocp_nlp_constraints_model_set(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_in, impl_->nlp_out, 0, "ubx", const_cast<double *>(x0.data()));
 #endif
   impl_->x0 = x0;  // same size as nx_ => no reallocation on the hot path
 }
@@ -266,7 +284,8 @@ void AcadosWrapper::setStageReference(
   impl_->yref_buffer[14] = u_ref[2];
   impl_->yref_buffer[15] = u_ref[3];
 #ifdef UAV_MPC_WITH_ACADOS
-  ocp_nlp_cost_model_set(impl_->nlp_in, stage, "yref", impl_->yref_buffer.data());
+  ocp_nlp_cost_model_set(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_in, stage, "yref", impl_->yref_buffer.data());
 #endif
 }
 
@@ -286,7 +305,8 @@ void AcadosWrapper::setTerminalReference(const Eigen::VectorXd & x_ref)
   impl_->yref_buffer[10] = x_ref[nx_ - 2];
   impl_->yref_buffer[11] = x_ref[nx_ - 1];
 #ifdef UAV_MPC_WITH_ACADOS
-  ocp_nlp_cost_model_set(impl_->nlp_in, config_.horizon_steps, "yref",
+  ocp_nlp_cost_model_set(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_in, config_.horizon_steps, "yref",
     impl_->yref_buffer.data());
 #endif
 }
@@ -312,7 +332,8 @@ void AcadosWrapper::setParameters(const Eigen::VectorXd & p)
   if (!initialised_ || p.size() != np_) {return;}
 #ifdef UAV_MPC_WITH_ACADOS
   for (int stage = 0; stage < config_.horizon_steps; ++stage) {
-    quadrotor_acados_update_params(impl_->capsule, stage, p.data(), np_);
+    quadrotor_acados_update_params(impl_->capsule, stage,
+      const_cast<double *>(p.data()), np_);
   }
 #endif
 }
@@ -353,9 +374,11 @@ bool AcadosWrapper::setWeights(
 
 #ifdef UAV_MPC_WITH_ACADOS
   for (int stage = 0; stage < config_.horizon_steps; ++stage) {
-    ocp_nlp_cost_model_set(impl_->nlp_in, stage, "W", w.data());
+    ocp_nlp_cost_model_set(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_in, stage, "W", w.data());
   }
-  ocp_nlp_cost_model_set(impl_->nlp_in, config_.horizon_steps, "W", w_e.data());
+  ocp_nlp_cost_model_set(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_in, config_.horizon_steps, "W", w_e.data());
 #endif
   return true;
 }
@@ -378,11 +401,20 @@ SolveResult AcadosWrapper::solve()
   if (acados_status != ACADOS_SUCCESS) {
     ++consecutive_failures_;
     if (consecutive_failures_ == 1) {
-      resetToHover(impl_->x0, impl_->hover_thrust);
-      acados_status = quadrotor_acados_solve(impl_->capsule);
-      result.reinitialised = true;
+      // R2-16: refuse to recover from zero thrust (free-fall guess). When
+      // hover_thrust_per_rotor is 0, the solver has never been told what thrust
+      // to expect — the retry would be a free-fall dive. Warn and skip.
+      if (impl_->hover_thrust > 0.0) {
+        resetToHover(impl_->x0, impl_->hover_thrust);
+        acados_status = quadrotor_acados_solve(impl_->capsule);
+        result.reinitialised = true;
+      }
     }
-  } else {
+  }
+
+  // Reset the failure counter when the solver succeeds, whether it was the
+  // first attempt or the recovery retry (§6.5 bugfix).
+  if (acados_status == ACADOS_SUCCESS) {
     consecutive_failures_ = 0;
   }
 
@@ -396,7 +428,9 @@ SolveResult AcadosWrapper::solve()
   ocp_nlp_get(impl_->nlp_solver, "time_tot", &time_tot);
   ocp_nlp_get(impl_->nlp_solver, "sqp_iter", &sqp_iter);
   ocp_nlp_get(impl_->nlp_solver, "cost_value", &cost);
-  ocp_nlp_get(impl_->nlp_solver, "residuals", &kkt);
+  // acados 0.6.0: "residuals" was split into res_stat/res_eq/res_ineq/res_comp.
+  // res_stat is the stationarity residual inf-norm (closest to the old combined KKT).
+  ocp_nlp_get(impl_->nlp_solver, "res_stat", &kkt);
   result.solve_time_ms = time_tot * 1e3;
   result.sqp_iterations = sqp_iter;
   result.cost = cost;
@@ -442,7 +476,8 @@ Eigen::VectorXd AcadosWrapper::optimalInput() const
 {
   if (!initialised_) {return Eigen::VectorXd::Zero(nu_);}
 #ifdef UAV_MPC_WITH_ACADOS
-  ocp_nlp_out_get(impl_->nlp_out, 0, "u", impl_->u_buffer.data());
+  ocp_nlp_out_get(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_out, 0, "u", impl_->u_buffer.data());
 #endif
   return Eigen::Map<const Eigen::VectorXd>(impl_->u_buffer.data(), nu_);
 }
@@ -452,7 +487,8 @@ Eigen::VectorXd AcadosWrapper::predictedState(int stage) const
   if (!initialised_) {return Eigen::VectorXd::Zero(nx_);}
 #ifdef UAV_MPC_WITH_ACADOS
   const int clamped = std::max(0, std::min(stage, config_.horizon_steps));
-  ocp_nlp_out_get(impl_->nlp_out, clamped, "x", impl_->x_buffer.data());
+  ocp_nlp_out_get(impl_->nlp_config, impl_->nlp_dims,
+    impl_->nlp_out, clamped, "x", impl_->x_buffer.data());
 #else
   (void)stage;
 #endif
@@ -485,12 +521,16 @@ void AcadosWrapper::resetToHover(const Eigen::VectorXd & x0, double hover_thrust
   hover_u.setConstant(hover_thrust_per_rotor);
 
   for (int stage = 0; stage <= config_.horizon_steps; ++stage) {
-    ocp_nlp_out_set(impl_->nlp_out, stage, "x", hover_x.data());
+    ocp_nlp_out_set(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, impl_->nlp_in, stage, "x", hover_x.data());
     if (stage < config_.horizon_steps) {
-      ocp_nlp_out_set(impl_->nlp_out, stage, "u", hover_u.data());
+      ocp_nlp_out_set(impl_->nlp_config, impl_->nlp_dims,
+        impl_->nlp_out, impl_->nlp_in, stage, "u", hover_u.data());
     }
-    ocp_nlp_out_set(impl_->nlp_out, stage, "lam", impl_->zero_buffer.data());
-    ocp_nlp_out_set(impl_->nlp_out, stage, "pi", impl_->zero_buffer.data());
+    ocp_nlp_out_set(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, impl_->nlp_in, stage, "lam", impl_->zero_buffer.data());
+    ocp_nlp_out_set(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, impl_->nlp_in, stage, "pi", impl_->zero_buffer.data());
   }
 #endif
 }
@@ -501,12 +541,16 @@ void AcadosWrapper::shiftWarmStart()
 #ifdef UAV_MPC_WITH_ACADOS
   // x_k <- x_{k+1} for k in [0, N-1]; x_N unchanged. u_k <- u_{k+1} for k in [0, N-2].
   for (int stage = 0; stage < config_.horizon_steps; ++stage) {
-    ocp_nlp_out_get(impl_->nlp_out, stage + 1, "x", impl_->x_buffer.data());
-    ocp_nlp_out_set(impl_->nlp_out, stage, "x", impl_->x_buffer.data());
+    ocp_nlp_out_get(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, stage + 1, "x", impl_->x_buffer.data());
+    ocp_nlp_out_set(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, impl_->nlp_in, stage, "x", impl_->x_buffer.data());
   }
   for (int stage = 0; stage + 1 < config_.horizon_steps; ++stage) {
-    ocp_nlp_out_get(impl_->nlp_out, stage + 1, "u", impl_->u_buffer.data());
-    ocp_nlp_out_set(impl_->nlp_out, stage, "u", impl_->u_buffer.data());
+    ocp_nlp_out_get(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, stage + 1, "u", impl_->u_buffer.data());
+    ocp_nlp_out_set(impl_->nlp_config, impl_->nlp_dims,
+      impl_->nlp_out, impl_->nlp_in, stage, "u", impl_->u_buffer.data());
   }
 #endif
 }

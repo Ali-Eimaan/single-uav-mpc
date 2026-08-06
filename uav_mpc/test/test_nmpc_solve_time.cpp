@@ -186,12 +186,12 @@ TEST(NmpcSolveTime, HoverSolveWithinBudget)
   solver.setReferenceHorizon(x_refs, u_refs);
 
   std::mt19937 rng(42);
+
+  // Warm up: 100 discarded solves so caches, TLB and the codegen'd initialisations settle.
   Eigen::VectorXd x0 = x_hover;
   perturbState(&x0, rng);
   solver.setInitialState(x0);
   solver.resetToHover(x0, hover_thrust);
-
-  // Warm up: 100 discarded solves so caches, TLB and the codegen'd initialisations settle.
   for (int i = 0; i < kWarmUpSolves; ++i) {
     const uav_mpc::SolveResult r = solver.solve();
     ASSERT_EQ(r.status, uav_mpc::SolverStatus::Success);
@@ -202,6 +202,7 @@ TEST(NmpcSolveTime, HoverSolveWithinBudget)
   times.reserve(static_cast<std::size_t>(kSamples));
   bool all_ok = true;
   for (int i = 0; i < kSamples; ++i) {
+    x0 = x_hover;  // reset so perturbState does not random-walk (§5.2)
     perturbState(&x0, rng);
     solver.setInitialState(x0);
 
@@ -328,10 +329,10 @@ TEST(NmpcSolveTime, ColdStartSolveWithinRelaxedBudget)
   solver.setReferenceHorizon(x_refs, u_refs);
 
   std::mt19937 rng(1234);
-  Eigen::VectorXd x0 = x_hover;
-  perturbState(&x0, rng);
 
   // Warm up once from hover, then discard the guess on every sample with resetToHover().
+  Eigen::VectorXd x0 = x_hover;
+  perturbState(&x0, rng);
   solver.setInitialState(x0);
   solver.resetToHover(x0, hover_thrust);
   ASSERT_EQ(solver.solve().status, uav_mpc::SolverStatus::Success);
@@ -340,6 +341,7 @@ TEST(NmpcSolveTime, ColdStartSolveWithinRelaxedBudget)
   times.reserve(static_cast<std::size_t>(kSamples));
   bool all_ok = true;
   for (int i = 0; i < kSamples; ++i) {
+    x0 = x_hover;  // reset so perturbState does not random-walk (§5.2)
     perturbState(&x0, rng);
     // No warm start is available: blow away the primal/dual guess before every solve.
     solver.resetToHover(x0, hover_thrust);
