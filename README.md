@@ -4,16 +4,31 @@ Real-time nonlinear MPC for a quadrotor on ROS 2 Lyrical Luth, using an acados-g
 SQP-RTI solver. Speaks **standard ROS 2 messages** by default; PX4/uXRCE-DDS is an optional
 backend.
 
-<!-- Badges are intentionally absent until the workflows pass. Do not add one before the
-     workflow is green — a red badge on the landing page is worse than none.
-[![colcon build](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml/badge.svg)](...)
--->
+[![colcon build](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml)
+[![format check](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml)
+[![SITL smoke test](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/docker_smoke_test.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/docker_smoke_test.yml)
 
-> **Status: implemented, not yet verified.** All subsystems are written and unit-tested on
-> paper, but **nothing in this repository has been compiled or flown yet** — acados has not been
-> built here and no ROS 2 build has run. Numbers marked *TBM* (to be measured) are unfilled by
-> design rather than estimated. Known defects are tracked in
-> [`.deepseek/REVIEW.md`](.deepseek/REVIEW.md).
+[![ROS 2 Lyrical Luth](https://img.shields.io/badge/ROS%202-Lyrical%20Luth-22314E?logo=ros&logoColor=white)](https://docs.ros.org/)
+[![Ubuntu 26.04](https://img.shields.io/badge/Ubuntu-26.04%20LTS-E95420?logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/)
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
+[![Python 3.14](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![acados 0.6.0](https://img.shields.io/badge/acados-0.6.0-2E7D32)](https://github.com/acados/acados)
+[![Eigen 3.4](https://img.shields.io/badge/Eigen-3.4-8E44AD)](https://eigen.tuxfamily.org/)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+[![version 0.1.0](https://img.shields.io/badge/version-0.1.0-lightgrey)](uav_mpc/package.xml)
+[![status: pre-release](https://img.shields.io/badge/status-pre--release-orange)](.deepseek/REVIEW.md)
+
+> **Status: pre-release (`0.1.0`). Builds and passes its unit suite; not yet flown, and not yet
+> runnable in simulation.** The R1 review is closed — 13 of 15 fixes independently re-derived
+> and confirmed correct, 1 partial, 1 not started. The R2 review is open with **6 blockers**,
+> including a one-shot solver-recovery path seeded with zero thrust, an unimplemented yaw-unwrap
+> requirement that two tests were narrowed around, and no runnable Gazebo path.
+> Details and fixes in [`.deepseek/REVIEW.md`](.deepseek/REVIEW.md); test run in
+> [`.deepseek/FIX_REPORT.md`](.deepseek/FIX_REPORT.md).
+>
+> Numbers marked *TBM* are unfilled by design rather than estimated. `1.0.0` is tagged when all
+> nine acceptance criteria in
+> [`.deepseek/01_OVERVIEW.md` §1.3](.deepseek/01_OVERVIEW.md) are green.
 
 ---
 
@@ -81,7 +96,15 @@ Run against any odometry source:
 ros2 launch uav_mpc nmpc_only.launch.py vehicle_interface:=generic airframe:=x500
 ```
 
-PX4 SITL (needs `px4_msgs` in the workspace and a PX4 checkout):
+Run the test suite:
+
+```bash
+colcon test --packages-select uav_mpc && colcon test-result --verbose --all
+```
+
+PX4 SITL — **does not work on Lyrical Luth today.** It needs `px4_msgs` in the workspace, which
+has no Lyrical release, so the node will refuse to configure. Tracked as
+[R2-1](.deepseek/REVIEW.md); a Gazebo bridge for the generic backend is the planned fix.
 
 ```bash
 ros2 launch uav_mpc sitl.launch.py headless:=false trajectory:=figure8
@@ -95,16 +118,21 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DUAV_MPC_WITH_ACADOS=OFF
 
 ## Results
 
-Nothing has been measured yet. These rows are the deliverable of milestone M9
-([`.deepseek/12_ANALYSIS.md`](.deepseek/12_ANALYSIS.md)); each must name the CPU it was measured
-on and the git SHA that produced it, and report the from-bag number next to the synthetic one.
+**No number here is quotable yet.** Solve times have been recorded, but from a `Debug` build,
+and the gate test that proves the real solver was linked was reported as skipped — so the
+measurement cannot be distinguished from the stub backend. That is review finding
+[R2-3](.deepseek/REVIEW.md); it must be re-taken in Release before anything fills this table.
+
+Each row must name the CPU it was measured on and the git SHA that produced it, and report the
+from-bag number next to the synthetic one
+([`.deepseek/12_ANALYSIS.md`](.deepseek/12_ANALYSIS.md)).
 
 | Metric | Value | Conditions |
 | --- | --- | --- |
 | Median solve time | *TBM* | CPU, horizon, acados commit |
 | p99 solve time | *TBM* | target: < 2 ms (A2) |
 | RMS tracking error, figure-8 | *TBM* | amplitude, period, wind |
-| SITL hover RMS error | *TBM* | target: < 0.15 m (A6) |
+| SITL hover RMS error | *TBM* | target: < 0.15 m (A6) — blocked on [R2-1](.deepseek/REVIEW.md) |
 
 Regenerate with:
 
