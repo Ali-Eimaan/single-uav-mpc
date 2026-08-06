@@ -127,7 +127,8 @@ jobs:
         run: |
           pip install yamllint
           # Relaxed line-length rule lives in the committed .yamllint, not inline.
-          yamllint -c .yamllint config/ params/
+          # acceptance_criteria.yaml is load-bearing (R1-13), so lint it with the rest.
+          yamllint -c .yamllint uav_mpc/config/ uav_mpc/params/ acceptance_criteria.yaml
       - name: xmllint package.xml (format 3)
         run: |
           apt-get update -qq && apt-get install -y -qq libxml2-utils

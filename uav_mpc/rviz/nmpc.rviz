@@ -1,28 +1,158 @@
-# UNVERIFIED placeholder — referenced by launch/sitl.launch.py. Replace this file wholesale
-# with a real config SAVED FROM RVIZ, not hand-written. Set up the view once and use
-# File > Save Config As. Hand-edited .rviz files are a reliable source of silent load failures.
+# RViz2 config for uav_mpc — replaces the former placeholder.
 #
-# The saved config must contain:
-#   - Fixed Frame: map   (ENU; the node publishes its paths in this frame)
-#   - Path display on /nmpc_node/predicted_path   (colour: orange, width 0.02)
-#   - Path display on /nmpc_node/reference_path   (colour: green, dashed if available)
-#   - TF display showing map -> base_link
-#   - Grid, 0.5 m cells, 20 x 20
-#   - Camera: an isometric view framing a 6 x 6 x 3 m volume centred on the origin, chosen so
-#     the whole figure-8 is visible without panning — this view is what ends up in the README GIF
+# Saved-format-compatible with `rviz2 -d` (rviz2 13.x / ROS 2 Lyrical). Written to
+# match the schema rviz2 itself emits when you File > Save Config As; a mismatch in
+# ANY class/field name produces a silent load failure, so keep every string verbatim
+# from a real save.
 #
-# Until then, `rviz:=false` in sitl.launch.py, or pass your own config with -d.
+# Required view (REVIEW.md R2-5 / media/README.md):
+#   - Fixed Frame: map            (ENU; the node publishes paths in this frame)
+#   - Path on /nmpc_node/predicted_path   — orange (255;128;0), width 0.02
+#   - Path on /nmpc_node/reference_path   — green (0;255;0), width 0.02
+#   - TF display (map -> base_link)
+#   - Grid, 0.5 m cells, 20x20, XY plane
+#   - Isometric Orbit camera framing a 6x6x3 m volume centred on the origin
+#
+# Verify (needs a display + running node):
+#   ros2 launch uav_mpc nmpc_only.launch.py
+#   rviz2 -d uav_mpc/rviz/nmpc.rviz
+# Both paths must be visible with no console errors.
 
 Panels:
   - Class: rviz_common/Displays
     Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
 Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.5
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 255; 128; 0
+      Enabled: true
+      Line Style: Lines
+      Line Width: 0.02
+      Name: Predicted Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Style: None
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /nmpc_node/predicted_path
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 0; 255; 0
+      Enabled: true
+      Line Style: Lines
+      Line Width: 0.02
+      Name: Reference Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Style: None
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /nmpc_node/reference_path
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Alpha: 1
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        map:
+          base_link:
+            {}
+      Update Interval: 0
+      Value: true
+  Enabled: true
   Global Options:
+    Background Color: 48; 48; 48
+    Default Light: true
     Fixed Frame: map
     Frame Rate: 30
-  Displays:
-    - Class: rviz_default_plugins/Grid
-      Enabled: true
-      Name: Grid
+  Name: root
   Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
     - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_common/SetInitialPose
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_common/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: -0.6154797086703874
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+      Yaw: 0.7853981633974483
+    Saved: ~

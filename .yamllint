@@ -9,6 +9,12 @@ rules:
     level: warning
   comments-indentation: disable
   document-start: disable
+  # Column-aligned matrix blocks (nmpc_params.yaml q_diag / r_diag / q_terminal_diag)
+  # align values for readability, which the default one-space rules reject.
+  colons:
+    max-spaces-after: 4
+  commas:
+    max-spaces-after: 4
   truthy:
     # Launch files legitimately use 'on'/'yes' as words in descriptions.
     allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']

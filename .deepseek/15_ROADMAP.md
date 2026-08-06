@@ -74,5 +74,44 @@ grep -rn "TODO(deepseek)" --exclude-dir=.git --exclude-dir=.deepseek . | wc -l
 grep -rn "UNVERIFIED" --exclude-dir=.git --exclude-dir=.deepseek .
 ```
 
+---
+
+## §18 · Release criteria
+
+The project is pre-release at version `0.1.0` (see `uav_mpc/package.xml`). Do **not** tag
+`1.0.0` until the gate below holds — keeping `0.1.0` while R2-1..R2-3 are open is the honest
+number.
+
+**Gate for `1.0.0`:** all nine acceptance criteria (A1-A9) in
+[01_OVERVIEW.md §1.3](01_OVERVIEW.md) are green, in CI, on the hardware named in the README.
+
+| # | Criterion | Verified by |
+| --- | --- | --- |
+| A1 | Clean-container build succeeds, Release | `colcon_build.yml` |
+| A2 | p99 NMPC solve time < 2 ms, median < 1 ms | `test_nmpc_solve_time.cpp` |
+| A3 | Generated solver matches the committed model hash | `test_acados_codegen.py` |
+| A4 | CasADi model and C++ dynamics agree to 1e-9 | `test_acados_codegen.py` |
+| A5 | References are C⁴; flatness map consistent with the dynamics | `test_trajectory_continuity.cpp` |
+| A6 | SITL: 10 s autonomous hover, RMS error < 0.15 m, zero solver failures | `docker_smoke_test.yml` |
+| A7 | SITL: 2 laps of a figure-8, RMS error < 0.25 m | `docker_smoke_test.yml` |
+| A8 | `sitl.launch.py` flies from a clean clone in one command | manual, before each release |
+| A9 | All linters clean | `format_check.yml` |
+
+**Who checks it:** the maintainer runs the release checklist below; CI runs A1-A9 automatically.
+**What happens on each tag:** a release commit bumps the version in `uav_mpc/package.xml`,
+updates `CHANGELOG.rst`, and tags `v<version>`. `bloom` releases are out of scope until a ROS
+distro ships `px4_msgs` (the `generic` backend is the default and needs no `px4_msgs`).
+
+### Release checklist (run before every tag)
+
+1. A1-A9 all green in CI on the README's named hardware.
+2. `media/figure8.gif`, `media/disturbance_recovery.gif`, `media/solve_time_histogram.png`
+   exist and are reproducible from `analysis/` (R2-8).
+3. `CITATION.cff` version matches `uav_mpc/package.xml` (R2-9).
+4. `CHANGELOG.rst` is current (R2-12).
+
+If any criterion cannot be met, change the criterion in `01_OVERVIEW.md §1.3` with a written
+reason — do not weaken a test in place.
+
 Both should trend to zero. The second one reaching zero matters more than the first — an
 unimplemented function is visible, an unverified constant is not.

@@ -1,6 +1,7 @@
 # Python toolchain for codegen/ and analysis/.
 #
 # Target interpreter: Python 3.14 (the system Python on Ubuntu 26.04 / ROS 2 Lyrical Luth).
+# Verified against Python 3.14.4 on linux-x86_64 (Ubuntu 26.04) on 2026-08-06.
 #
 # Ubuntu 26.04 enforces PEP 668 (externally-managed environment), so a bare `pip install`
 # into the system interpreter will be refused. Use a venv created with --system-site-packages
@@ -8,22 +9,24 @@
 #   python3 -m venv --system-site-packages .venv
 #   . .venv/bin/activate && pip install -r requirements.txt
 #
-# UNVERIFIED: every pin below is a forward-looking guess. Before trusting them, confirm
-# each package publishes a cp314 wheel for linux-x86_64 — building casadi or scipy from source
-# in CI turns a 5-minute job into a 30-minute one. Where no cp314 wheel exists yet, pin the
-# newest version that does and record the constraint in a trailing comment.
+# Pins marked `# verified <date>, py3.14 <platform>` were installed and importable on that
+# interpreter/platform (see the marker's date). Pins still marked `# UNVERIFIED` have NOT been
+# confirmed on any machine — before trusting them, confirm the package publishes a cp314 wheel
+# for linux-x86_64; building casadi or scipy from source in CI turns a 5-minute job into a
+# 30-minute one. Where no cp314 wheel exists yet, pin the newest version that does and record
+# the constraint in a trailing comment.
 
 # --- codegen (pinned: solver C output must be byte-reproducible in CI) ---
-casadi==3.7.0          # UNVERIFIED cp314
-numpy==2.3.1           # NOTE: numpy 2.x, not 1.26 — 1.x has no cp314 wheels
-scipy==1.16.0          # UNVERIFIED cp314
+casadi==3.7.2          # verified 2026-08-06, py3.14 linux-x86_64
+numpy==2.3.5           # verified 2026-08-06, py3.14 linux-x86_64
+scipy==1.16.3          # verified 2026-08-06, py3.14 linux-x86_64
 # acados_template is installed from the acados source tree, NOT PyPI:
 #   pip install -e ${ACADOS_SOURCE_DIR}/interfaces/acados_template
 # Pinned acados commit is recorded in codegen/ACADOS_COMMIT.
 
 # --- analysis ---
-matplotlib==3.10.3     # UNVERIFIED cp314
-pandas==2.3.0
+matplotlib==3.10.7     # verified 2026-08-06, py3.14 linux-x86_64
+pandas==2.3.3
 jupyter==1.1.1
 seaborn==0.13.2
 
@@ -35,9 +38,9 @@ rosbags==0.10.9        # UNVERIFIED against the Lyrical rosbag2 format
 
 # --- acceptance criteria (REVIEW R1-13) ---
 # scripts/assert_hover.py and scripts/acceptance_criteria_cmake.py read acceptance_criteria.yaml.
-pyyaml==6.0.3          # UNVERIFIED cp314; pure-python build on 3.14 if a wheel is missing
+pyyaml==6.0.3          # verified 2026-08-06, py3.14 linux-x86_64
 
 # --- dev ---
-pytest==8.4.1
+pytest==9.0.2
 black==25.1.0
-flake8==7.3.0
+flake8==7.3.0          # verified 2026-08-06, py3.14 linux-x86_64

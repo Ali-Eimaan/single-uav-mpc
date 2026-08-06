@@ -48,16 +48,16 @@
     # expected to need retuning once the solver is built and flown.
     # ---------------------------------------------------------------------------------------
     q_diag:   [200.0, 200.0, 400.0,    # position        [1/m^2]
-                10.0,  10.0,  20.0,    # velocity        [1/(m/s)^2]
-                50.0,  50.0,  20.0,    # attitude error  (vector part, dimensionless)
-                 1.0,   1.0,   1.0]    # body rates      [1/(rad/s)^2]
+               10.0,  10.0,  20.0,    # velocity        [1/(m/s)^2]
+               50.0,  50.0,  20.0,    # attitude error  (vector part, dimensionless)
+               1.0,   1.0,   1.0]     # body rates      [1/(rad/s)^2]
 
     r_diag:   [0.5, 0.5, 0.5, 0.5]     # per-rotor thrust deviation from the reference [1/N^2]
 
     q_terminal_diag: [400.0, 400.0, 800.0,
-                       20.0,  20.0,  40.0,
+                      20.0,  20.0,  40.0,
                       100.0, 100.0,  40.0,
-                        2.0,   2.0,   2.0]
+                      2.0,   2.0,   2.0]
 
     # ---------------------------------------------------------------------------------------
     # Solver behaviour

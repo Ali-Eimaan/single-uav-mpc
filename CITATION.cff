@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+title: uav-mpc
+abstract: >-
+  Real-time nonlinear MPC for a quadrotor on ROS 2 Lyrical Luth, using an
+  acados-generated SQP-RTI solver. Speaks standard ROS 2 messages by default;
+  a PX4/uXRCE-DDS backend is an optional extra.
+authors:
+  - family-names: Eimaan
+    given-names: Ali
+    email: ali.eimaan@icloud.com
+    # ORCID to be added once the author profile exists.
+version: 0.1.0
+date-released: 2026-08-06
+license: BSD-3-Clause
+url: https://github.com/Ali-Eimaan/uav-mpc
+repository-code: https://github.com/Ali-Eimaan/uav-mpc
+keywords:
+  - ros2
+  - mpc
+  - quadrotor
+  - acados
+  - nonlinear-control
+references:
+  - type: software
+    title: transition-viable-swarm
+    relationship: is-derivative-of
+    scope: >-
+      The OCP structure and the differential-flatness-based reference generation
+      in uav-mpc carry over to this distributed MPC-CBF swarm controller.
