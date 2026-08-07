@@ -16,7 +16,7 @@
 # runners are too noisy, so CI relaxes them via the UAV_MPC_SOLVE_*_BUDGET_MS environment
 # overrides (documented exception in .github/workflows/colcon_build.yml).
 a2_solve_time_ms:
-  p99: 2.5
+  p99: 2.0
   median: 1.0
 
 # A6 — SITL hover smoke-test assertions (scripts/assert_hover.py). Deliberately looser than
