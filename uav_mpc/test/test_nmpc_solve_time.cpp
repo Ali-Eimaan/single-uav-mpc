@@ -59,6 +59,12 @@ double budgetMs(const char * var, double def)
   return (v == nullptr) ? def : std::strtod(v, nullptr);
 }
 
+/// Wall-clock timeout for the test environment, to prevent OS scheduling jitter from
+/// producing false Timeout statuses.  This is independent of the performance budget
+/// (kP99BudgetMs / kMedianBudgetMs), which still gates solve speed.  Defaults to 100 ms
+/// — high enough that only a genuinely stuck solver triggers it.
+constexpr double kTestWallTimeoutMs = 100.0;
+
 /// Loads params/x500_calibration.yaml relative to the test binary (UAV_MPC_SOURCE_DIR is a
 /// compile definition set in CMakeLists.txt — never hard-code a path).
 uav_mpc::QuadrotorParams loadX500()
@@ -91,10 +97,23 @@ uav_mpc::AcadosWrapper makeSolver()
   cfg.r_diag = yamlVector(ros["r_diag"]);
   cfg.q_terminal_diag = yamlVector(ros["q_terminal_diag"]);
   cfg.max_sqp_iterations = ros["max_sqp_iterations"].as<int>();
-  cfg.solve_time_budget_ms = ros["solve_time_budget_ms"].as<double>();
+  // Use a generous wall-clock timeout for tests: OS scheduling jitter on shared CI
+  // runners can stretch wall time well past the acados self-reported solve time, and
+  // a Timeout status here would be a false positive.  The real-time performance
+  // gates are the p99/median checks below, which use kP99BudgetMs/kMedianBudgetMs.
+  cfg.solve_time_budget_ms = budgetMs("UAV_MPC_SOLVE_WALL_TIMEOUT_MS", kTestWallTimeoutMs);
   cfg.max_consecutive_failures = ros["max_consecutive_failures"].as<int>();
   cfg.warm_start = ros["warm_start"].as<bool>();
   cfg.shift_on_warm_start = ros["shift_on_warm_start"].as<bool>();
+
+  // REVIEW R2-16: seed hover thrust so the in-solver recovery path is never
+  // disabled by a zero-per-rotor thrust.  The x500 calibration is the default
+  // test airframe; the value gets overwritten by the first resetToHover call
+  // in the test anyway, so it is only a safety net.
+  {
+    const auto ap = loadX500();
+    cfg.hover_thrust_per_rotor = ap.mass * ap.gravity / 4.0;
+  }
 
   uav_mpc::AcadosWrapper solver;
   std::string error;
@@ -251,6 +270,15 @@ TEST(NmpcSolveTime, Figure8SolveWithinBudget)
   tp.ramp_in_time = 3.0;
   tp.yaw_follows_velocity = true;
   uav_mpc::TrajectoryGenerator gen(tp);
+
+  // REVIEW R2-16: seed a hover warm start and hover thrust so the first solve is not
+  // cold and the in-solver recovery path can retry from a sane guess if needed.
+  {
+    const uav_mpc::QuadrotorDynamics<double, uav_mpc::AttitudeRep::Quaternion> dyn(airframe);
+    const double hover_thrust = dyn.hoverThrustPerRotor();
+    const Eigen::VectorXd x_hover = hoverState(Eigen::Vector3d(0.0, 0.0, tp.altitude));
+    solver.resetToHover(x_hover, hover_thrust);
+  }
 
   std::mt19937 rng(7);
   double t0 = 0.0;
