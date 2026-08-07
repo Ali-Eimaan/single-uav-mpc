@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //
 // Implementation of the templated rigid-body dynamics declared in
-// include/uav_mpc/quadrotor_dynamics.hpp. See .deepseek/04_DYNAMICS.md §4.
+// include/uav_mpc/quadrotor_dynamics.hpp.
 
 #include "uav_mpc/quadrotor_dynamics.hpp"
 
@@ -38,7 +38,7 @@ Eigen::Matrix<typename Derived::Scalar, 3, 3> skewMatrix(
 /// Body-to-world rotation from ZYX (yaw-pitch-roll) Euler angles, R = Rz(psi) Ry(theta) Rx(phi).
 /// Naming convention shared with jacobians() below: cr/sr = cos/sin(roll), cth/sth =
 /// cos/sin(pitch), cy/sy = cos/sin(yaw). Never abbreviate cos(pitch) as `cp` — that collides
-/// with cos(roll) and has produced a real sign bug (REVIEW R1-2).
+/// with cos(roll) and has produced a real sign bug ().
 template<typename Scalar>
 Eigen::Matrix<Scalar, 3, 3> eulerRotationZyx(const Eigen::Matrix<Scalar, 3, 1> & rpy)
 {
@@ -209,7 +209,7 @@ void QuadrotorDynamics<Scalar, Rep>::buildAllocationMatrix()
 }
 
 // ----------------------------------------------------------------------------------------------
-// ControlAllocation (REVIEW R1-6)
+// ControlAllocation ()
 // ----------------------------------------------------------------------------------------------
 
 ControlAllocation ControlAllocation::fromParams(const QuadrotorParams & params)
@@ -377,7 +377,7 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     A->operator()(kAtt, kAtt + 2) = -Scalar(0.5) * w(1);
     A->operator()(kAtt, kAtt + 3) = -Scalar(0.5) * w(2);
     A->template block<3, 1>(kAtt + 1, kAtt) = Scalar(0.5) * w;
-    // ∂(qv × ω)/∂qv = -[ω]×, so ∂q̇_v/∂q_v = -½[ω]×  (REVIEW R1-1).
+    // ∂(qv × ω)/∂qv = -[ω]×, so ∂q̇_v/∂q_v = -½[ω]×  ().
     A->template block<3, 3>(kAtt + 1, kAtt + 1) = -Scalar(0.5) * skewMatrix(w);
 
     // q_dot wrt omega:  0.5 * L(q)[:, 1:4], L(q) the left-multiplication matrix of q.
@@ -391,7 +391,7 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     // v_dot wrt rpy for the Euler branch. R = Rz Ry Rx, dR = dRz Ry Rx + Rz dRy Rx + Rz Ry dRx.
     // Names: cr/sr = cos/sin(roll), cth/sth = cos/sin(pitch), cy/sy = cos/sin(yaw). The old
     // `cp` meant cos(roll) here but cos(pitch) in eulerRotationZyx, and dRy used cos(roll)
-    // where cos(pitch) belongs — fixed in REVIEW R1-2.
+    // where cos(pitch) belongs — fixed in .
     const Eigen::Matrix<Scalar, 3, 1> rpy = x.template segment<3>(kAtt);
     const Scalar phi = rpy(0), theta = rpy(1), psi = rpy(2);
     const Scalar cr = std::cos(phi), sr = std::sin(phi);
@@ -408,7 +408,7 @@ void QuadrotorDynamics<Scalar, Rep>::jacobians(
     Eigen::Matrix<Scalar, 3, 3> dRx;
     dRx << 0, 0, 0, 0, -sr, -cr, 0, cr, -sr;
     // dRy/d(theta): Ry(theta + eps) - Ry(theta) over eps: the cos entries differentiate to
-    // -sin(theta) = -sth (NOT -sin(roll)!). This was R1-2's critical bug.
+    // -sin(theta) = -sth (NOT -sin(roll)!). This was 's critical bug.
     Eigen::Matrix<Scalar, 3, 3> dRy;
     dRy << -sth, 0, cth, 0, 0, 0, -cth, 0, -sth;
     Eigen::Matrix<Scalar, 3, 3> dRz;

@@ -1,5 +1,5 @@
 # Fast, no-build lint gate. Should finish in under two minutes so it is the first thing a
-# contributor sees fail. See .deepseek/14_CI.md §14.2.
+# contributor sees fail.
 #
 # Python lint settings live in the committed setup.cfg (flake8) and .yamllint — no inline
 # flags, or the local run and the CI run drift apart.
@@ -38,7 +38,7 @@ jobs:
             ros-${ROS_DISTRO}-ament-cmake-cpplint \
             ros-${ROS_DISTRO}-ament-cmake-uncrustify \
             || true
-          if command -v ament_clang_format >/dev/null 2>&1; then
+          if command -v ament_uncrustify >/dev/null 2>&1; then
             echo "ament linters installed from debs"
           else
             echo "ros-${ROS_DISTRO} linter debs not published yet (risk V3) — installing from source"
@@ -60,19 +60,11 @@ jobs:
             echo "/opt/venv/bin" >> "$GITHUB_PATH"
           fi
 
-      - name: clang-format (fail on any diff, print the fix)
-        run: |
-          set -euxo pipefail
-          if ! ament_clang_format --config-file .clang-format \
-              uav_mpc/src uav_mpc/include uav_mpc/test; then
-            # Reformat and show the diff so the fix is copy-pasteable.
-            ament_clang_format --config-file .clang-format --reformat \
-              uav_mpc/src uav_mpc/include uav_mpc/test
-            git diff -- uav_mpc || true
-            echo "::error::clang-format would reformat the sources above. Fix with:"
-            echo "  ament_clang_format --config-file .clang-format --reformat uav_mpc/src uav_mpc/include uav_mpc/test"
-            exit 1
-          fi
+      # clang-format is deliberately NOT a gate. It and uncrustify are competing
+      # formatters and disagree irreconcilably on clang-format 21 (`{ return x; }` vs
+      # `{return x;}`, `template <T>` vs `template<T>`). ament_lint_common ships uncrustify +
+      # cpplint and omits clang-format for exactly this reason. `.clang-format` is kept as an
+      # editor aid only. Do not re-add a clang-format step here.
 
       - name: cpplint
         run: |
@@ -127,36 +119,38 @@ jobs:
         run: |
           pip install yamllint
           # Relaxed line-length rule lives in the committed .yamllint, not inline.
-          # acceptance_criteria.yaml is load-bearing (R1-13), so lint it with the rest.
+          # acceptance_criteria.yaml is load-bearing, so lint it with the rest.
           yamllint -c .yamllint uav_mpc/config/ uav_mpc/params/ acceptance_criteria.yaml
-      - name: xmllint package.xml (format 3)
+      - name: xmllint package.xml
         run: |
+          set -euo pipefail
           apt-get update -qq && apt-get install -y -qq libxml2-utils
-          schema="/tmp/package_format3.xsd"
-          curl -fsSL https://download.ros.org/schema/package_format3.xsd -o "$schema"
-          xmllint --noout --schema "$schema" uav_mpc/package.xml
-
-  docs:
-    name: Docs are not stale
-    runs-on: ubuntu-26.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
+          # Well-formedness is checked ALWAYS and needs no network.
+          xmllint --noout uav_mpc/package.xml
+          # Schema validation is best-effort: download.ros.org is not always reachable from a
+          # runner, and a lint gate must not depend on a third-party host being up. The
+          # authoritative schema check is ament_xmllint during `colcon test`.
+          schema=/tmp/package_format3.xsd
+          if curl -fsSL --max-time 30 https://download.ros.org/schema/package_format3.xsd -o "$schema"; then
+            xmllint --noout --schema "$schema" uav_mpc/package.xml
+            echo "package.xml validated against the format-3 schema"
+          else
+            echo "::notice::schema unreachable — well-formedness checked only"
+          fi
       - name: Count TODO and UNVERIFIED markers
         run: |
-          # A progress meter, not a gate, until v1.0. --exclude-dir=.deepseek is required:
-          # the specification documents quote the marker string, and counting those would make
-          # the meter never reach zero. --exclude-dir=.github is required for the same reason:
-          # this very grep pattern lives in a workflow file.
-          todos=$(grep -rn "TODO(deepseek)" --exclude-dir=.git --exclude-dir=.deepseek --exclude-dir=.github . | wc -l)
-          unverified=$(grep -rn "UNVERIFIED" --exclude-dir=.git --exclude-dir=.deepseek --exclude-dir=.github . | wc -l)
-          echo "## Docs are not stale" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- remaining \`TODO(deepseek)\` markers: **$todos**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- remaining \`UNVERIFIED\` markers: **$unverified**" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "UNVERIFIED matters more than TODO: an unimplemented function is visible, an" >> "$GITHUB_STEP_SUMMARY"
-          echo "unverified constant is not (see .deepseek/15_ROADMAP.md §17)." >> "$GITHUB_STEP_SUMMARY"
-          echo "TODO(deepseek) count: $todos | UNVERIFIED count: $unverified"
-          # Gate at v1.0 — uncomment the lines below.
-          # if [ "$todos" -ne 0 ]; then echo "::error::TODO(deepseek) markers remain"; exit 1; fi
+          set -euo pipefail
+          # A progress meter, not a gate. --exclude-dir=.github is required or this grep
+          # pattern would match the workflow file it lives in.
+          todos=$(grep -rnI "TODO" --exclude-dir=.git --exclude-dir=.github . | wc -l)
+          unverified=$(grep -rnI "UNVERIFIED" --exclude-dir=.git --exclude-dir=.github . | wc -l)
+          {
+            echo "## Outstanding markers"
+            echo ""
+            echo "- \`TODO\`: **$todos**"
+            echo "- \`UNVERIFIED\`: **$unverified**"
+            echo ""
+            echo "UNVERIFIED matters more than TODO: an unimplemented function is visible,"
+            echo "an unverified constant is not."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "TODO=$todos UNVERIFIED=$unverified"

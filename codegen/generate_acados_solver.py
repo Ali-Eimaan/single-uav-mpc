@@ -1,5 +1,5 @@
 """Generates the acados SQP-RTI C solver into codegen/codegen_output/.
-See .deepseek/11_CODEGEN.md §11.2 and 06_SOLVER.md §6.2–6.4.
+ and 06_SOLVER.md §6.2–6.4.
 
     python codegen/generate_acados_solver.py \
         --airframe uav_mpc/params/x500_calibration.yaml \
@@ -35,7 +35,9 @@ import yaml
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-from quadrotor_model import (
+# noqa: E402 — the warning filters above must be installed before quadrotor_model imports
+# casadi, or acados' DeprecationWarnings escape to stderr and pollute --check-only diffs.
+from quadrotor_model import (  # noqa: E402
     AirframeConstants,
     export_quadrotor_model,
     model_hash,
@@ -83,20 +85,21 @@ def load_nmpc_config(path: Path) -> dict:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--airframe",
-        default=str(HERE.parent / "uav_mpc/params/x500_calibration.yaml"))
-    parser.add_argument(
-        "--config",
-        default=str(HERE.parent / "uav_mpc/config/nmpc_params.yaml"))
+        "--airframe", default=str(HERE.parent / "uav_mpc/params/x500_calibration.yaml")
+    )
+    parser.add_argument("--config", default=str(HERE.parent / "uav_mpc/config/nmpc_params.yaml"))
     parser.add_argument("--output", default=str(HERE / "codegen_output"))
+    parser.add_argument("--attitude-rep", default="quaternion", choices=["quaternion", "euler"])
     parser.add_argument(
-        "--attitude-rep", default="quaternion", choices=["quaternion", "euler"])
+        "--allow-acados-mismatch",
+        action="store_true",
+        help="proceed even if the installed acados does not match codegen/ACADOS_COMMIT",
+    )
     parser.add_argument(
-        "--allow-acados-mismatch", action="store_true",
-        help="proceed even if the installed acados does not match codegen/ACADOS_COMMIT")
-    parser.add_argument(
-        "--check-only", action="store_true",
-        help="regenerate into a temp dir and diff against the committed tree; exit 1 on drift")
+        "--check-only",
+        action="store_true",
+        help="regenerate into a temp dir and diff against the committed tree; exit 1 on drift",
+    )
     return parser.parse_args()
 
 
@@ -106,13 +109,13 @@ def check_acados_version(allow_mismatch: bool) -> str:
     if not source_dir:
         raise RuntimeError(
             "ACADOS_SOURCE_DIR is not set. Install acados from source and export "
-            "ACADOS_SOURCE_DIR (see .deepseek/02_ENVIRONMENT.md).")
+            "ACADOS_SOURCE_DIR."
+        )
     result = subprocess.run(
-        ["git", "-C", source_dir, "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=False)
+        ["git", "-C", source_dir, "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"cannot resolve acados HEAD in {source_dir}: {result.stderr.strip()}")
+        raise RuntimeError(f"cannot resolve acados HEAD in {source_dir}: {result.stderr.strip()}")
 
     installed = result.stdout.strip()
     pinned = None
@@ -124,7 +127,8 @@ def check_acados_version(allow_mismatch: bool) -> str:
     if pinned is None:
         raise RuntimeError(
             f"{ACADOS_COMMIT_FILE} does not contain a 40-char commit SHA; pin acados before "
-            f"generating (see .deepseek/11_CODEGEN.md §11.3).")
+            f"generating."
+        )
 
     if installed != pinned:
         msg = (
@@ -132,7 +136,8 @@ def check_acados_version(allow_mismatch: bool) -> str:
             f"Check out the pinned commit and reinstall acados_template:\n"
             f"  git -C {source_dir} checkout {pinned}\n"
             f"  pip install -e {source_dir}/interfaces/acados_template\n"
-            f"or pass --allow-acados-mismatch to proceed anyway.")
+            f"or pass --allow-acados-mismatch to proceed anyway."
+        )
         if not allow_mismatch:
             raise RuntimeError(msg)
         print(f"WARNING: {msg}", file=sys.stderr)
@@ -171,7 +176,7 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
     nu = model.u.shape[0]
 
     # --- dimensions --------------------------------------------------------------
-    ocp.dims.N = int(config["horizon_steps"])             # 20
+    ocp.dims.N = int(config["horizon_steps"])  # 20
     ocp.solver_options.tf = float(config["horizon_time"])  # 1.0 s -> dt = 50 ms
 
     # --- cost: NONLINEAR_LS (§6.3) ------------------------------------------------
@@ -179,11 +184,11 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
     omega = model.x[10:13]
     q_ref = model.p[4:8]
     y_expr = cs.vertcat(
-        model.x[0:3],               # p
-        model.x[3:6],               # v
-        quat_error_vec(q, q_ref),   # shortest-arc attitude error
+        model.x[0:3],  # p
+        model.x[3:6],  # v
+        quat_error_vec(q, q_ref),  # shortest-arc attitude error
         omega,
-        model.u,                    # u
+        model.u,  # u
     )
     y_expr_e = cs.vertcat(
         model.x[0:3],
@@ -191,8 +196,8 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
         quat_error_vec(q, q_ref),
         omega,
     )
-    ny = y_expr.shape[0]            # 16
-    ny_e = y_expr_e.shape[0]        # 12
+    ny = y_expr.shape[0]  # 16
+    ny_e = y_expr_e.shape[0]  # 12
 
     ocp.cost.cost_type = "NONLINEAR_LS"
     ocp.cost.cost_type_e = "NONLINEAR_LS"
@@ -200,16 +205,17 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
     ocp.model.cost_y_expr = y_expr
     ocp.model.cost_y_expr_e = y_expr_e
 
-    q_diag = np.array(config["q_diag"], dtype=float)          # 12 entries
-    r_diag = np.array(config["r_diag"], dtype=float)          # 4 entries
+    q_diag = np.array(config["q_diag"], dtype=float)  # 12 entries
+    r_diag = np.array(config["r_diag"], dtype=float)  # 4 entries
     q_terminal_diag = np.array(config["q_terminal_diag"], dtype=float)
     assert q_diag.shape == (12,), f"q_diag must have 12 entries, got {q_diag.shape}"
     assert r_diag.shape == (4,), f"r_diag must have 4 entries, got {r_diag.shape}"
-    assert q_terminal_diag.shape == (12,), \
-        f"q_terminal_diag must have 12 entries, got {q_terminal_diag.shape}"
+    assert q_terminal_diag.shape == (
+        12,
+    ), f"q_terminal_diag must have 12 entries, got {q_terminal_diag.shape}"
 
-    W = np.diag(np.concatenate([q_diag, r_diag]))             # 16x16
-    W_e = np.diag(q_terminal_diag)                            # 12x12
+    W = np.diag(np.concatenate([q_diag, r_diag]))  # 16x16
+    W_e = np.diag(q_terminal_diag)  # 12x12
     # Path stages 0..N-1 (loop is still needed for the per-stage indexing).
     # acados 0.6.0: copy_path_cost_to_stage_0() sets cost_type_0, y_expr_0,
     # W_0, yref_0 from the path cost automatically.
@@ -289,8 +295,13 @@ def build_ocp(model, constants: AirframeConstants, config: dict):
     return ocp
 
 
-def write_provenance(output_dir: Path, acados_commit: str, model_hash_value: str,
-                     airframe_path: Path, config_path: Path) -> None:
+def write_provenance(
+    output_dir: Path,
+    acados_commit: str,
+    model_hash_value: str,
+    airframe_path: Path,
+    config_path: Path,
+) -> None:
     """Emit MODEL_HASH, include/model_hash.h and GENERATION_PROVENANCE.txt (no timestamps)."""
     include_dir = output_dir / "include"
     include_dir.mkdir(parents=True, exist_ok=True)
@@ -303,7 +314,8 @@ def write_provenance(output_dir: Path, acados_commit: str, model_hash_value: str
         "#ifndef UAV_MPC__MODEL_HASH_H_\n"
         "#define UAV_MPC__MODEL_HASH_H_\n"
         f'#define UAV_MPC_MODEL_HASH "{model_hash_value}"\n'
-        "#endif  // UAV_MPC__MODEL_HASH_H_\n")
+        "#endif  // UAV_MPC__MODEL_HASH_H_\n"
+    )
 
     # <output>/GENERATION_PROVENANCE.txt
     def sha256_of(path: Path) -> str:
@@ -348,13 +360,14 @@ def strip_nondeterminism(output_dir: Path) -> None:
             # acados >= 0.5.6 embeds the code_export_directory absolute path in
             # JSON; normalise it so two runs to different temp dirs are identical.
             new_data, n4 = CODE_EXPORT_DIR_RE.subn(
-                b'"code_export_directory": "/codegen/c_generated_code"', new_data)
+                b'"code_export_directory": "/codegen/c_generated_code"', new_data
+            )
             new_data, n5 = JSON_FILE_RE.subn(
-                b'"json_file": "/codegen/acados_ocp_quadrotor.json"', new_data)
+                b'"json_file": "/codegen/acados_ocp_quadrotor.json"', new_data
+            )
             # acados >= 0.6.0 stores a top-level hash that includes
             # path-dependent fields — re-compute after normalising them.
-            new_data, n6 = HASH_RE.subn(
-                b'"hash": "00000000000000000000000000000000"', new_data)
+            new_data, n6 = HASH_RE.subn(b'"hash": "00000000000000000000000000000000"', new_data)
             replaced += n1 + n2 + n3 + n4 + n5 + n6
             if new_data != data:
                 path.write_bytes(new_data)
@@ -368,7 +381,8 @@ def strip_nondeterminism(output_dir: Path) -> None:
     if leftovers:
         raise RuntimeError(
             "strip_nondeterminism: date-like strings remain in generated files: "
-            + ", ".join(leftovers))
+            + ", ".join(leftovers)
+        )
 
 
 def _diff_trees(committed: Path, fresh: Path) -> str:
@@ -378,6 +392,7 @@ def _diff_trees(committed: Path, fresh: Path) -> str:
     tree was built (build=True) while --check-only regenerates with build=False, so those
     files legitimately differ and would be noise.
     """
+
     def relevant(path: Path):
         rel = path.relative_to(committed) if path.is_relative_to(committed) else path
         rel_str = str(rel).replace("\\", "/")
@@ -387,11 +402,9 @@ def _diff_trees(committed: Path, fresh: Path) -> str:
 
     lines = []
     committed_files = {
-        p.relative_to(committed) for p in committed.rglob("*")
-        if p.is_file() and relevant(p)}
-    fresh_files = {
-        p.relative_to(fresh) for p in fresh.rglob("*")
-        if p.is_file() and relevant(p)}
+        p.relative_to(committed) for p in committed.rglob("*") if p.is_file() and relevant(p)
+    }
+    fresh_files = {p.relative_to(fresh) for p in fresh.rglob("*") if p.is_file() and relevant(p)}
     for rel in sorted(committed_files - fresh_files):
         lines.append(f"only in committed: {rel}")
     for rel in sorted(fresh_files - committed_files):
@@ -432,12 +445,16 @@ def main() -> int:
             # so compare it separately.
             committed_hash = output_dir.parent / "MODEL_HASH"
             if committed_hash.is_file() and committed_hash.read_text().strip() != hash_value:
-                diff += ("\ndiffers: MODEL_HASH ("
-                         f"committed {committed_hash.read_text().strip()} vs fresh {hash_value})")
+                diff += (
+                    "\ndiffers: MODEL_HASH ("
+                    f"committed {committed_hash.read_text().strip()} vs fresh {hash_value})"
+                )
         if diff:
             print("codegen drift detected — regenerate with:")
-            print(f"  python {Path(__file__).name} --airframe {args.airframe} "
-                  f"--config {args.config} --output {args.output}")
+            print(
+                f"  python {Path(__file__).name} --airframe {args.airframe} "
+                f"--config {args.config} --output {args.output}"
+            )
             print("differences:")
             print(diff)
             return 1
@@ -483,8 +500,7 @@ def _symlink_hashed_outputs(gen_dir: Path) -> None:
     hash_str = ""
     for plain, pattern in patterns.items():
         for ext in (".h", ".c", ".so"):
-            matches = sorted(_glob.glob(str(gen_dir / (pattern + ext)),
-                                       root_dir=str(gen_dir)))
+            matches = sorted(_glob.glob(str(gen_dir / (pattern + ext)), root_dir=str(gen_dir)))
             if matches:
                 hashed = gen_dir / matches[0]
                 link = gen_dir / (plain + ext)
@@ -503,7 +519,8 @@ def _symlink_hashed_outputs(gen_dir: Path) -> None:
     if hash_str:
         compat_header = gen_dir / "acados_solver_compat.h"
         suffix = f"OCP_QUADROTOR_{hash_str.upper()}_"
-        compat_header.write_text(f"""\
+        compat_header.write_text(
+            f"""\
 // Auto-generated compatibility aliases for acados >= 0.6.0 naming convention.
 // Generated by codegen/generate_acados_solver.py — DO NOT EDIT.
 #ifndef ACADOS_SOLVER_COMPAT_H_
@@ -540,7 +557,8 @@ def _symlink_hashed_outputs(gen_dir: Path) -> None:
 #define quadrotor_acados_reset           ocp_quadrotor_{hash_str}_acados_reset
 
 #endif  // ACADOS_SOLVER_COMPAT_H_
-""")
+"""
+        )
         print(f"  written: {compat_header.name}")
 
 

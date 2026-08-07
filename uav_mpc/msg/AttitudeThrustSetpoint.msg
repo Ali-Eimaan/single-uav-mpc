@@ -4,7 +4,7 @@
 # works without px4_msgs. The PX4 backend converts this into px4_msgs/VehicleAttitudeSetpoint
 # internally; the generic backend publishes it as-is for any adapter to consume.
 #
-# Conventions (see .deepseek/16_CONVENTIONS.md):
+# Conventions:
 #   attitude  — world ENU, body FLU, Hamilton (w, x, y, z). NOT NED/FRD.
 #   thrust    — newtons in `collective_thrust_newton`; the normalised value is provided too so
 #               an adapter does not have to know the airframe mass.

@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "analysis"))  # bag_utils lives next to the notebooks
 from bag_utils import read_topics, require_topic  # noqa: E402
 
-# REVIEW R1-13: thresholds are criterion A6, read from acceptance_criteria.yaml at the repo
+# thresholds are criterion A6, read from acceptance_criteria.yaml at the repo
 # root — the single source of truth. Deliberately looser than the unit tests: a shared CI
 # runner is not a flight computer. Editing the YAML is the ONLY supported way to change them.
 _A6 = yaml.safe_load((REPO_ROOT / "acceptance_criteria.yaml").read_text())["a6_hover"]
@@ -41,19 +41,31 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bag_path", help="rosbag2 directory recorded by the smoke test")
     parser.add_argument(
-        "--window", type=float, default=10.0,
-        help="steady-state seconds after STATE_TRACKING to score")
+        "--window",
+        type=float,
+        default=10.0,
+        help="steady-state seconds after STATE_TRACKING to score",
+    )
     parser.add_argument(
-        "--takeoff-altitude", type=float, default=1.5,
+        "--takeoff-altitude",
+        type=float,
+        default=1.5,
         help="commanded takeoff altitude [m] AGL; the MIN_ALTITUDE_FRACTION check is "
-             "relative to this")
+        "relative to this",
+    )
     parser.add_argument(
-        "--max-rms", type=float, default=MAX_RMS_POSITION_ERROR_M,
+        "--max-rms",
+        type=float,
+        default=MAX_RMS_POSITION_ERROR_M,
         help="RMS position error limit [m] (defaults to MAX_RMS_POSITION_ERROR_M); the "
-             "figure-8 job relaxes this")
+        "figure-8 job relaxes this",
+    )
     parser.add_argument(
-        "--json", metavar="PATH", default=None,
-        help="dump the metrics as JSON (workflow summary consumes this)")
+        "--json",
+        metavar="PATH",
+        default=None,
+        help="dump the metrics as JSON (workflow summary consumes this)",
+    )
     return parser.parse_args()
 
 
@@ -72,8 +84,7 @@ def load_metrics(bag_path: str, window_s: float, takeoff_altitude: float) -> dic
     sample and runs `window_s` seconds on the record clock.
     """
     bag = Path(bag_path)
-    data = read_topics(
-        bag, ("/nmpc_node/status", "/fmu/out/vehicle_local_position"))
+    data = read_topics(bag, ("/nmpc_node/status", "/fmu/out/vehicle_local_position"))
     require_topic(data, "/nmpc_node/status", bag)
     require_topic(data, "/fmu/out/vehicle_local_position", bag)
 
@@ -91,15 +102,17 @@ def load_metrics(bag_path: str, window_s: float, takeoff_altitude: float) -> dic
         "tracking_started": bool(tracking),
     }
     if not tracking:
-        metrics.update({
-            "time_to_tracking_s": math.inf,
-            "rms_position_error_m": math.nan,
-            "peak_position_error_m": math.nan,
-            "solver_failure_count": math.nan,
-            "p99_solve_time_ms": math.nan,
-            "min_altitude_fraction": math.nan,
-            "scored_duration_s": 0.0,
-        })
+        metrics.update(
+            {
+                "time_to_tracking_s": math.inf,
+                "rms_position_error_m": math.nan,
+                "peak_position_error_m": math.nan,
+                "solver_failure_count": math.nan,
+                "p99_solve_time_ms": math.nan,
+                "min_altitude_fraction": math.nan,
+                "scored_duration_s": 0.0,
+            }
+        )
         return metrics
 
     t_track = tracking[0][0]
@@ -113,10 +126,12 @@ def load_metrics(bag_path: str, window_s: float, takeoff_altitude: float) -> dic
     failures = [m.solver.status for _, m in win_status]
     solve_times = [m.solver.wall_time_ms for _, m in win_status]
     metrics["rms_position_error_m"] = (
-        float(np.sqrt(np.mean(np.square(errors)))) if errors else math.nan)
+        float(np.sqrt(np.mean(np.square(errors)))) if errors else math.nan
+    )
     metrics["peak_position_error_m"] = float(max(errors)) if errors else math.nan
     metrics["solver_failure_count"] = (
-        int(sum(1 for s in failures if s != STATUS_SUCCESS)) if failures else math.nan)
+        int(sum(1 for s in failures if s != STATUS_SUCCESS)) if failures else math.nan
+    )
     metrics["p99_solve_time_ms"] = _percentile(solve_times, 99.0)
 
     # Altitude AGL = -z (PX4 local position is NED, z down). Fraction of the commanded
@@ -139,36 +154,66 @@ def check(metrics: dict) -> list[str]:
     if not metrics["tracking_started"]:
         return [
             f"vehicle never reached STATE_TRACKING "
-            f"(time_to_tracking_s = inf > MAX_TIME_TO_TRACKING_S = {MAX_TIME_TO_TRACKING_S})"]
+            f"(time_to_tracking_s = inf > MAX_TIME_TO_TRACKING_S = {MAX_TIME_TO_TRACKING_S})"
+        ]
 
     def cmp(name: str, value: float, limit: float, const: str, unit: str, op: str) -> None:
         if math.isnan(value):
-            failures.append(f"{name} = NaN (scored window empty?): no data to compare "
-                            f"against {const} = {limit} {unit}")
+            failures.append(
+                f"{name} = NaN (scored window empty?): no data to compare "
+                f"against {const} = {limit} {unit}"
+            )
             return
         if op == "<=" and not value <= limit:
-            failures.append(
-                f"{name} = {value:.3f} {unit} > {const} = {limit} {unit}")
+            failures.append(f"{name} = {value:.3f} {unit} > {const} = {limit} {unit}")
         elif op == ">=" and not value >= limit:
-            failures.append(
-                f"{name} = {value:.3f} {unit} < {const} = {limit} {unit}")
+            failures.append(f"{name} = {value:.3f} {unit} < {const} = {limit} {unit}")
 
-    cmp("time_to_tracking_s", metrics["time_to_tracking_s"],
-        MAX_TIME_TO_TRACKING_S, "MAX_TIME_TO_TRACKING_S", "s", "<=")
+    cmp(
+        "time_to_tracking_s",
+        metrics["time_to_tracking_s"],
+        MAX_TIME_TO_TRACKING_S,
+        "MAX_TIME_TO_TRACKING_S",
+        "s",
+        "<=",
+    )
     rms_limit = metrics["rms_limit"]
     const = "MAX_RMS_POSITION_ERROR_M"
     if rms_limit != MAX_RMS_POSITION_ERROR_M:
         const += f" (overridden by --max-rms={rms_limit})"
-    cmp("rms_position_error_m", metrics["rms_position_error_m"],
-        rms_limit, const, "m", "<=")
-    cmp("peak_position_error_m", metrics["peak_position_error_m"],
-        MAX_PEAK_POSITION_ERROR_M, "MAX_PEAK_POSITION_ERROR_M", "m", "<=")
-    cmp("solver_failure_count", float(metrics["solver_failure_count"]),
-        MAX_SOLVER_FAILURES, "MAX_SOLVER_FAILURES", "", "<=")
-    cmp("p99_solve_time_ms", metrics["p99_solve_time_ms"],
-        MAX_P99_SOLVE_MS, "MAX_P99_SOLVE_MS", "ms", "<=")
-    cmp("min_altitude_fraction", metrics["min_altitude_fraction"],
-        MIN_ALTITUDE_FRACTION, "MIN_ALTITUDE_FRACTION", "", ">=")
+    cmp("rms_position_error_m", metrics["rms_position_error_m"], rms_limit, const, "m", "<=")
+    cmp(
+        "peak_position_error_m",
+        metrics["peak_position_error_m"],
+        MAX_PEAK_POSITION_ERROR_M,
+        "MAX_PEAK_POSITION_ERROR_M",
+        "m",
+        "<=",
+    )
+    cmp(
+        "solver_failure_count",
+        float(metrics["solver_failure_count"]),
+        MAX_SOLVER_FAILURES,
+        "MAX_SOLVER_FAILURES",
+        "",
+        "<=",
+    )
+    cmp(
+        "p99_solve_time_ms",
+        metrics["p99_solve_time_ms"],
+        MAX_P99_SOLVE_MS,
+        "MAX_P99_SOLVE_MS",
+        "ms",
+        "<=",
+    )
+    cmp(
+        "min_altitude_fraction",
+        metrics["min_altitude_fraction"],
+        MIN_ALTITUDE_FRACTION,
+        "MIN_ALTITUDE_FRACTION",
+        "",
+        ">=",
+    )
     return failures
 
 
@@ -184,8 +229,10 @@ def _print_table(metrics: dict, failures: list[str]) -> None:
         ("n_status_samples", "", None),
         ("n_local_samples", "", None),
     ]
-    print(f"assert_hover: bag {metrics['bag_path']} "
-          f"(tracking_started={metrics['tracking_started']})")
+    print(
+        f"assert_hover: bag {metrics['bag_path']} "
+        f"(tracking_started={metrics['tracking_started']})"
+    )
     print(f"{'metric':<24} {'value':>12} {'limit':>10}  pass")
     for key, unit, limit in rows:
         value = metrics.get(key, math.nan)
@@ -194,8 +241,9 @@ def _print_table(metrics: dict, failures: list[str]) -> None:
         elif isinstance(value, float) and math.isinf(value):
             rendered, ok = "inf", "?"
         else:
-            rendered = f"{value:.4f}".rstrip("0").rstrip(".") if isinstance(value, float) \
-                else str(value)
+            rendered = (
+                f"{value:.4f}".rstrip("0").rstrip(".") if isinstance(value, float) else str(value)
+            )
             if limit is not None and not math.isnan(metrics.get(key, math.nan)):
                 ok = "yes" if value <= limit else "NO"
             else:

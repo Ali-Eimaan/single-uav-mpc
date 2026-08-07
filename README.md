@@ -6,7 +6,6 @@ backend.
 
 [![colcon build](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml)
 [![format check](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml)
-[![SITL smoke test](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/docker_smoke_test.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/docker_smoke_test.yml)
 
 [![ROS 2 Lyrical Luth](https://img.shields.io/badge/ROS%202-Lyrical%20Luth-22314E?logo=ros&logoColor=white)](https://docs.ros.org/)
 [![Ubuntu 26.04](https://img.shields.io/badge/Ubuntu-26.04%20LTS-E95420?logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/)
@@ -16,19 +15,27 @@ backend.
 [![Eigen 3.4](https://img.shields.io/badge/Eigen-3.4-8E44AD)](https://eigen.tuxfamily.org/)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
 [![version 0.1.0](https://img.shields.io/badge/version-0.1.0-lightgrey)](uav_mpc/package.xml)
-[![status: pre-release](https://img.shields.io/badge/status-pre--release-orange)](.deepseek/REVIEW.md)
+[![status: pre-release](https://img.shields.io/badge/status-pre--release-orange)]
 
-> **Status: pre-release (`0.1.0`). Builds and passes its unit suite; not yet flown, and not yet
-> runnable in simulation.** The R1 review is closed — 13 of 15 fixes independently re-derived
-> and confirmed correct, 1 partial, 1 not started. The R2 review is open with **6 blockers**,
-> including a one-shot solver-recovery path seeded with zero thrust, an unimplemented yaw-unwrap
-> requirement that two tests were narrowed around, and no runnable Gazebo path.
-> Details and fixes in [`.deepseek/REVIEW.md`](.deepseek/REVIEW.md); test run in
-> [`.deepseek/FIX_REPORT.md`](.deepseek/FIX_REPORT.md).
+> **Status: pre-release (`0.1.0`). Builds clean and passes its full suite on the target
+> platform; not yet flown, and not yet runnable in simulation.**
 >
-> Numbers marked *TBM* are unfilled by design rather than estimated. `1.0.0` is tagged when all
-> nine acceptance criteria in
-> [`.deepseek/01_OVERVIEW.md` §1.3](.deepseek/01_OVERVIEW.md) are green.
+> Verified by an actual containerised build (`ros:lyrical-ros-base`, Ubuntu 26.04, GCC 15.2,
+> Release): **85 tests, 0 failures, 0 skipped** with acados, and **0 failures** in the
+> no-acados stub configuration. Zero compiler warnings under
+> `-Wall -Wextra -Wpedantic -Wshadow -Wconversion`. Criterion A2 is met with ~4x margin
+> (see Results).
+>
+> All CI lint and build gates now pass locally in that container: cpplint, uncrustify, black,
+> flake8, yamllint and xmllint — six for six.
+>
+> Known gaps: the airframe constants in `uav_mpc/params/` are still marked `verified: false` —
+> traceable to published sources, but not measured. There is no Gazebo bridge yet, so the SITL
+> smoke test is manual-trigger-only rather than permanently red, and criteria A6/A7 are openly
+> unmet.
+>
+> Numbers marked *TBM* are unfilled by design rather than estimated. `1.0.0` is tagged when
+> every acceptance criterion in `acceptance_criteria.yaml` is green in CI.
 
 ---
 
@@ -104,13 +111,14 @@ colcon test --packages-select uav_mpc && colcon test-result --verbose --all
 
 PX4 SITL — **does not work on Lyrical Luth today.** It needs `px4_msgs` in the workspace, which
 has no Lyrical release, so the node will refuse to configure. Tracked as
-[R2-1](.deepseek/REVIEW.md); a Gazebo bridge for the generic backend is the planned fix.
+; a Gazebo bridge for the generic backend is the planned fix.
 
 ```bash
 ros2 launch uav_mpc sitl.launch.py headless:=false trajectory:=figure8
 ```
 
-Build without acados — core library, tests and the stub solver backend only:
+Build without acados — core library, tests and the stub solver backend only
+([full guide](docs/ACADOS.md)):
 
 ```bash
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DUAV_MPC_WITH_ACADOS=OFF
@@ -118,33 +126,37 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DUAV_MPC_WITH_ACADOS=OFF
 
 ## Results
 
-**No number here is quotable yet.** Solve times have been recorded, but from a `Debug` build,
-and the gate test that proves the real solver was linked was reported as skipped — so the
-measurement cannot be distinguished from the stub backend. That is review finding
-[R2-3](.deepseek/REVIEW.md); it must be re-taken in Release before anything fills this table.
-
-Each row must name the CPU it was measured on and the git SHA that produced it, and report the
-from-bag number next to the synthetic one
-([`.deepseek/12_ANALYSIS.md`](.deepseek/12_ANALYSIS.md)).
+Measured in a `ros:lyrical-ros-base` container (Ubuntu 26.04, GCC 15.2), Release build, real
+acados `503364817` — **not** the stub backend: `GeneratedModelHashMatchesCheckedInHash` runs and
+passes, which is only possible when the generated solver is linked. 10 000 warm-started solves
+per scenario on a 12th Gen Intel Core i5-12500H.
 
 | Metric | Value | Conditions |
 | --- | --- | --- |
-| Median solve time | *TBM* | CPU, horizon, acados commit |
-| p99 solve time | *TBM* | target: < 2 ms (A2) |
-| RMS tracking error, figure-8 | *TBM* | amplitude, period, wind |
-| SITL hover RMS error | *TBM* | target: < 0.15 m (A6) — blocked on [R2-1](.deepseek/REVIEW.md) |
+| Median solve time, hover | **0.218 ms** | N=20, Tf=1 s, acados `503364817`, i5-12500H |
+| p99 solve time, hover | **0.469 ms** | budget 2.0 ms (A2) — ~4x margin |
+| Median solve time, figure-8 | **0.318 ms** | 3 m amplitude, 5 s period |
+| p99 solve time, figure-8 | **0.729 ms** | budget 2.0 ms (A2) |
+| p99 solve time, cold start | **0.515 ms** | no warm start, budget 10 ms |
+| RMS tracking error, figure-8 | *TBM* | needs a simulator — blocked on  |
+| SITL hover RMS error | *TBM* | target < 0.15 m (A6) — blocked on  |
+
+The **max** solve time is 5.27 ms. That exceeds the production `solve_time_budget_ms` of 5.0 ms,
+which the wrapper currently stamps as `Timeout` and the node counts toward its failsafe
+threshold. Fix that before running under simulator load.
+
+These are synthetic (solver-driven) numbers. The from-flight numbers still need a vehicle.
 
 Regenerate with:
 
 ```bash
-python analysis/solve_time_benchmark.py --samples 10000 --out media/solve_time_histogram.png
+colcon test --packages-select uav_mpc --ctest-args -R test_nmpc_solve_time
 ```
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| [`.deepseek/`](.deepseek/README.md) | Implementation specification, split by subsystem, plus [`REVIEW.md`](.deepseek/REVIEW.md) |
 | [`uav_mpc/`](uav_mpc/) | The ROS 2 package: node, vehicle backends, dynamics, trajectory generation, solver wrapper |
 | [`codegen/`](codegen/) | CasADi model and the acados solver generator |
 | [`analysis/`](analysis/) | Benchmarks and the notebooks producing the plots above |
@@ -156,9 +168,10 @@ python analysis/solve_time_benchmark.py --samples 10000 --out media/solve_time_h
 
 - [Derivations](docs/DERIVATION.md) — dynamics, differential flatness, NMPC formulation
 - [Tuning guide](docs/TUNING_GUIDE.md) — weight selection and the failure table
+- [acados guide](docs/ACADOS.md) — what acados does, building with and without it
 - [Hardware bring-up](docs/HARDWARE_BRINGUP.md) — what has and has not been flown
-- [Implementation specification](.deepseek/README.md) — the spec this code is built against
-- [Review](.deepseek/REVIEW.md) — open defects from the R1 sweep
+- Implementation specification — the spec this code is built against
+- Review — open defects from the R1 sweep
 
 ## Requirements
 
@@ -167,9 +180,9 @@ Ubuntu 26.04 LTS · ROS 2 Lyrical Luth · Python 3.14 · Eigen 3.4 · acados (co
 
 Optional: `px4_msgs` + PX4 + Gazebo Jetty, for the PX4 backend and SITL.
 
-> Several of these pins are still unconfirmed against the Lyrical Luth package set — see the
-> version risk register in
-> [`.deepseek/02_ENVIRONMENT.md` §2.1](.deepseek/02_ENVIRONMENT.md).
+> These versions were confirmed by building and testing in a `ros:lyrical-ros-base` container
+> (Ubuntu 26.04, GCC 15.2, CMake 4.2.3, Python 3.14.4). `px4_msgs` remains unreleased for
+> Lyrical Luth, which is why it is optional.
 
 ## Citation
 

@@ -1,5 +1,5 @@
 """CasADi symbolic model of the quadrotor, exported as an `AcadosModel`.
-See .deepseek/11_CODEGEN.md §11.1.
+
 
 THE INVARIANT: these equations must be identical to
 uav_mpc/src/quadrotor_dynamics.cpp. test_acados_codegen.py enforces it numerically.
@@ -12,7 +12,7 @@ Params (np = 8):               p = [wind(3), mass_scale, q_ref(4, wxyz)]
 
 `q_ref` lives in the parameter vector because the NONLINEAR_LS cost residual contains the
 error quaternion q_ref^-1 (x) q, which is a function of both the state and the reference —
-acados' `yref` mechanism alone cannot express it. See .deepseek/06_SOLVER.md §6.3.
+acados' `yref` mechanism alone cannot express it.
 """
 
 from __future__ import annotations
@@ -41,16 +41,16 @@ class AirframeConstants:
     """
 
     frame_name: str = ""
-    mass: float = 0.0                       # [kg]
+    mass: float = 0.0  # [kg]
     inertia: np.ndarray = field(default_factory=lambda: np.zeros((3, 3)))  # [kg m^2]
-    arm_length: float = 0.0                 # [m]
-    thrust_coeff: float = 0.0               # [N/(rad/s)^2]
-    torque_coeff: float = 0.0               # [N m/(rad/s)^2]
-    rotor_time_constant: float = 0.0        # [s]
-    drag_coeff: np.ndarray = field(default_factory=lambda: np.zeros(3))    # [N s/m] body frame
-    gravity: float = 9.80665                # [m/s^2]
-    min_thrust_per_rotor: float = 0.0       # [N]
-    max_thrust_per_rotor: float = 0.0       # [N]
+    arm_length: float = 0.0  # [m]
+    thrust_coeff: float = 0.0  # [N/(rad/s)^2]
+    torque_coeff: float = 0.0  # [N m/(rad/s)^2]
+    rotor_time_constant: float = 0.0  # [s]
+    drag_coeff: np.ndarray = field(default_factory=lambda: np.zeros(3))  # [N s/m] body frame
+    gravity: float = 9.80665  # [m/s^2]
+    min_thrust_per_rotor: float = 0.0  # [N]
+    max_thrust_per_rotor: float = 0.0  # [N]
 
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> "AirframeConstants":
@@ -112,13 +112,15 @@ class AirframeConstants:
             else:
                 raise ValueError(
                     f"airframe params: 'airframe.inertia' must be a 3- or 9-element "
-                    f"sequence in {path}")
+                    f"sequence in {path}"
+                )
 
         drag_raw = req("drag_coeff")
         drag = np.array([float(v) for v in drag_raw])
         if drag.shape != (3,):
             raise ValueError(
-                f"airframe params: 'airframe.drag_coeff' must have 3 entries in {path}")
+                f"airframe params: 'airframe.drag_coeff' must have 3 entries in {path}"
+            )
 
         gravity = float(af["gravity"]) if "gravity" in af else 9.80665
 
@@ -152,14 +154,15 @@ def allocation_matrix(constants: AirframeConstants) -> np.ndarray:
     d = arm_length / sqrt(2), c = torque_coeff / thrust_coeff.
     """
     d = constants.arm_length / np.sqrt(2.0)
-    c = (constants.torque_coeff / constants.thrust_coeff
-         if constants.thrust_coeff > 0.0 else 0.0)
-    return np.array([
-        [1.0, 1.0, 1.0, 1.0],
-        [-d, +d, +d, -d],
-        [-d, +d, -d, +d],
-        [-c, -c, +c, +c],
-    ])
+    c = constants.torque_coeff / constants.thrust_coeff if constants.thrust_coeff > 0.0 else 0.0
+    return np.array(
+        [
+            [1.0, 1.0, 1.0, 1.0],
+            [-d, +d, +d, -d],
+            [-d, +d, -d, +d],
+            [-c, -c, +c, +c],
+        ]
+    )
 
 
 def quaternion_kinematics(q, omega):
@@ -206,11 +209,13 @@ def rotation_from_quaternion(q):
     in the C++ integrator (uav_mpc/src/quadrotor_dynamics.cpp step()).
     """
     qw, qx, qy, qz = q[0], q[1], q[2], q[3]
-    return cs.blockcat([
-        [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qw * qz), 2 * (qx * qz + qw * qy)],
-        [2 * (qx * qy + qw * qz), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qw * qx)],
-        [2 * (qx * qz - qw * qy), 2 * (qy * qz + qw * qx), 1 - 2 * (qx * qx + qy * qy)],
-    ])
+    return cs.blockcat(
+        [
+            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qw * qz), 2 * (qx * qz + qw * qy)],
+            [2 * (qx * qy + qw * qz), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qw * qx)],
+            [2 * (qx * qz - qw * qy), 2 * (qy * qz + qw * qx), 1 - 2 * (qx * qx + qy * qy)],
+        ]
+    )
 
 
 def _rotation_from_euler(rpy):
@@ -219,11 +224,13 @@ def _rotation_from_euler(rpy):
     cp, sp = cs.cos(phi), cs.sin(phi)
     ct, st = cs.cos(theta), cs.sin(theta)
     cy, sy = cs.cos(psi), cs.sin(psi)
-    return cs.blockcat([
-        [cy * ct, cy * st * sp - sy * cp, cy * st * cp + sy * sp],
-        [sy * ct, sy * st * sp + cy * cp, sy * st * cp - cy * sp],
-        [-st, ct * sp, ct * cp],
-    ])
+    return cs.blockcat(
+        [
+            [cy * ct, cy * st * sp - sy * cp, cy * st * cp + sy * sp],
+            [sy * ct, sy * st * sp + cy * cp, sy * st * cp - cy * sp],
+            [-st, ct * sp, ct * cp],
+        ]
+    )
 
 
 def export_quadrotor_model(constants: AirframeConstants, attitude_rep: str = "quaternion"):
@@ -260,8 +267,8 @@ def export_quadrotor_model(constants: AirframeConstants, attitude_rep: str = "qu
     # generate_acados_solver.py. Kept here so the layout is defined in exactly one place.
 
     # --- forces and torques -------------------------------------------------------------
-    F_b = cs.vertcat(0.0, 0.0, cs.sum1(u))       # collective thrust, body +z
-    tau = allocation_matrix(constants) @ u        # [T; tau_x; tau_y; tau_z]
+    F_b = cs.vertcat(0.0, 0.0, cs.sum1(u))  # collective thrust, body +z
+    tau = allocation_matrix(constants) @ u  # [T; tau_x; tau_y; tau_z]
     tau_b = tau[1:4]
 
     m = constants.mass
@@ -286,7 +293,7 @@ def export_quadrotor_model(constants: AirframeConstants, attitude_rep: str = "qu
     f_impl = xdot - f_expl
 
     model = AcadosModel()
-    model.name = "quadrotor"          # load-bearing: generated symbols derive from it (§11.1)
+    model.name = "quadrotor"  # load-bearing: generated symbols derive from it (§11.1)
     model.x = x
     model.xdot = xdot
     model.u = u

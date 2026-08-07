@@ -68,7 +68,7 @@ loss. Any one of these → kill switch, land, review the log.
 ## 3.5 Choosing the vehicle backend
 
 `px4_msgs` is not released for ROS 2 Lyrical Luth, so the controller ships with two backends
-(`.deepseek/07_NODE.md` §7.10). Pick before you power anything on:
+. Pick before you power anything on:
 
 | Situation | Setting |
 | --- | --- |
@@ -97,7 +97,7 @@ props off.
 
 - **Differences from PX4**: no `px4_msgs`, no EKF you control, a much lighter airframe with
   faster attitude dynamics (see the timescale discussion in the tuning guide §6).
-- **Adapter node contract** (`.deepseek/08_LAUNCH.md` §8.4): the NMPC publishes the same
+- **Adapter node contract**: the NMPC publishes the same
   interface (attitude setpoint + thrust, diagnostics); `crazyflie_ros2` expects its own
   message types, so an adapter translates. The thrust-to-PWM map is a separate calibration
   step — the Crazyflie's motor map is highly nonlinear, and the hover setpoint must be

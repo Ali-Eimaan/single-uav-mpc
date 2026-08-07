@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// Autopilot abstraction. See .deepseek/07_NODE.md §7.10.
+// Autopilot abstraction.
 //
 // WHY THIS EXISTS: px4_msgs is not released for ROS 2 Lyrical Luth, so the controller must not
 // depend on it. Everything autopilot-specific lives behind this interface:

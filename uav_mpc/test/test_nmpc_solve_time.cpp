@@ -8,7 +8,7 @@
 //   - reported as median / p95 / p99 / max over N samples, never a single mean
 //   - the threshold is on the p99, because a 100 Hz loop that misses once per second is broken
 //
-// See .deepseek/10_TESTS.md §10.1. In the stub backend (UAV_MPC_WITH_ACADOS undefined) every
+// In the stub backend (UAV_MPC_WITH_ACADOS undefined) every
 // solve is a no-op that returns Success in ~0 ms, so the budget assertions trivially pass —
 // they only have teeth when the generated acados solver is linked in.
 
@@ -37,7 +37,7 @@
 #error "UAV_MPC_CODEGEN_DIR must be defined (set in CMakeLists.txt)"
 #endif
 
-// REVIEW R1-13: the budgets are the A2 acceptance criteria, generated at configure time from
+// the budgets are the A2 acceptance criteria, generated at configure time from
 // acceptance_criteria.yaml (the single source of truth). Do not edit them here.
 #include "acceptance_criteria.h"  // NOLINT(build/include_subdir)
 
@@ -106,7 +106,7 @@ uav_mpc::AcadosWrapper makeSolver()
   cfg.warm_start = ros["warm_start"].as<bool>();
   cfg.shift_on_warm_start = ros["shift_on_warm_start"].as<bool>();
 
-  // REVIEW R2-16: seed hover thrust so the in-solver recovery path is never
+  // seed hover thrust so the in-solver recovery path is never
   // disabled by a zero-per-rotor thrust.  The x500 calibration is the default
   // test airframe; the value gets overwritten by the first resetToHover call
   // in the test anyway, so it is only a safety net.
@@ -271,7 +271,7 @@ TEST(NmpcSolveTime, Figure8SolveWithinBudget)
   tp.yaw_follows_velocity = true;
   uav_mpc::TrajectoryGenerator gen(tp);
 
-  // REVIEW R2-16: seed a hover warm start and hover thrust so the first solve is not
+  // seed a hover warm start and hover thrust so the first solve is not
   // cold and the in-solver recovery path can retry from a sane guess if needed.
   {
     const uav_mpc::QuadrotorDynamics<double, uav_mpc::AttitudeRep::Quaternion> dyn(airframe);

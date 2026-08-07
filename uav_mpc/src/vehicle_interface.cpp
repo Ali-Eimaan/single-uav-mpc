@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //
 // Generic (autopilot-agnostic) vehicle backend + the backend factory.
-// See .deepseek/07_NODE.md §7.10.
+//
 //
 // This translation unit uses STANDARD ROS 2 messages only. It builds on any distro, with or
 // without px4_msgs, and is the default backend.
@@ -150,7 +150,7 @@ private:
 
     // nav_msgs/Odometry twist is expressed in the CHILD (body) frame. The controller wants
     // world-frame velocity, so rotate it. Getting this wrong is invisible at hover and shows
-    // up as a heading-dependent tracking error — see .deepseek/16_CONVENTIONS.md.
+    // up as a heading-dependent tracking error.
     const Eigen::Vector3d v_body(
       msg->twist.twist.linear.x, msg->twist.twist.linear.y, msg->twist.twist.linear.z);
     odom.velocity_enu = odom.attitude_enu_flu * v_body;

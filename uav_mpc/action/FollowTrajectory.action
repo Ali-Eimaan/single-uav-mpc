@@ -2,7 +2,7 @@
 # and by the analysis sweeps.
 #
 # NOTE: not wired into nmpc_node in v0.1 — the interface is generated so downstream packages
-# (transition-viable-swarm) can already compile against it. See .deepseek/08_LAUNCH.md §8.4.
+# (transition-viable-swarm) can already compile against it.
 
 # --- goal ---
 TrajectorySpec spec

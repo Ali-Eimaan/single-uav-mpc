@@ -163,7 +163,7 @@ TEST(DynamicsJacobians, EulerRepMatchesFiniteDifferences)
                                                                                         }
 }
 
-/// REVIEW R1-2 regression: the analytic dRy/d(theta) once used cos(roll) where cos(pitch)
+/// regression: the analytic dRy/d(theta) once used cos(roll) where cos(pitch)
 /// belongs. The random sampler draws roll and pitch independently, so a collision is only
 /// guaranteed to be exercised when roll != pitch — pin a state with roll = 0.2, pitch = -0.5
 /// (both comfortably inside the singular-free envelope) and diff the Jacobian against central

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Emit the C++-bound acceptance criteria as KEY=VALUE lines for CMake configure_file.
 
-The single source of truth is acceptance_criteria.yaml at the repo root (REVIEW R1-13):
+The single source of truth is acceptance_criteria.yaml at the repo root ():
 the SITL assertions read it directly, and the C++ solve-time budgets (A2) are substituted
 into test/acceptance_criteria.h.in at configure time via this script. If a number is edited
 in the YAML, both consumers pick it up; CMake fails loudly when this script cannot run.

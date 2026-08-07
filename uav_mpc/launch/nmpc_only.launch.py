@@ -1,4 +1,4 @@
-"""Launches ONLY the NMPC lifecycle node. See .deepseek/08_LAUNCH.md §8.1.
+"""Launches ONLY the NMPC lifecycle node.
 
 Assumes PX4 (SITL or hardware) and the uXRCE-DDS agent are already running. This is the
 building block every other launch file includes.
@@ -38,41 +38,57 @@ def generate_launch_description() -> LaunchDescription:
     # ------------------------------------------------------------------ arguments --------------
     declared_arguments = [
         DeclareLaunchArgument(
-            "airframe", default_value="x500",
-            description="'x500' | 'crazyflie21' -> selects params/<airframe>_calibration.yaml"),
+            "airframe",
+            default_value="x500",
+            description="'x500' | 'crazyflie21' -> selects params/<airframe>_calibration.yaml",
+        ),
         DeclareLaunchArgument(
             "nmpc_config",
-            default_value=PathJoinSubstitution(
-                [share_dir, "config", "nmpc_params.yaml"]),
-            description="full path override for config/nmpc_params.yaml"),
+            default_value=PathJoinSubstitution([share_dir, "config", "nmpc_params.yaml"]),
+            description="full path override for config/nmpc_params.yaml",
+        ),
         DeclareLaunchArgument(
             "trajectory_config",
-            default_value=PathJoinSubstitution(
-                [share_dir, "config", "trajectory_params.yaml"]),
-            description="full path override for config/trajectory_params.yaml"),
+            default_value=PathJoinSubstitution([share_dir, "config", "trajectory_params.yaml"]),
+            description="full path override for config/trajectory_params.yaml",
+        ),
         DeclareLaunchArgument(
-            "namespace", default_value="",
-            description="namespace for the node's OWN topics (PX4 /fmu/* topics stay absolute)"),
+            "namespace",
+            default_value="",
+            description="namespace for the node's OWN topics (PX4 /fmu/* topics stay absolute)",
+        ),
         DeclareLaunchArgument(
-            "vehicle_interface", default_value="generic",
+            "vehicle_interface",
+            default_value="generic",
             description="autopilot backend: 'generic' (standard ROS 2 messages, no px4_msgs "
-                        "needed — the default) or 'px4' (requires a build with px4_msgs)"),
+            "needed — the default) or 'px4' (requires a build with px4_msgs)",
+        ),
         DeclareLaunchArgument(
-            "auto_arm", default_value="false",
-            description="arm via VehicleCommand once offboard is active (SITL/CI only)"),
+            "auto_arm",
+            default_value="false",
+            description="arm via VehicleCommand once offboard is active (SITL/CI only)",
+        ),
         DeclareLaunchArgument(
-            "auto_activate", default_value="true",
-            description="emit the lifecycle configure+activate transitions"),
-        DeclareLaunchArgument("log_level", default_value="info",
-                              description="ROS log level for the node"),
-        DeclareLaunchArgument("use_sim_time", default_value="false",
-                              description="use /clock for timestamps (SITL/bag replay)"),
+            "auto_activate",
+            default_value="true",
+            description="emit the lifecycle configure+activate transitions",
+        ),
+        DeclareLaunchArgument(
+            "log_level", default_value="info", description="ROS log level for the node"
+        ),
+        DeclareLaunchArgument(
+            "use_sim_time",
+            default_value="false",
+            description="use /clock for timestamps (SITL/bag replay)",
+        ),
         # Extension consumed by sitl.launch.py / figure8.launch.py: the trajectory TYPE the
         # node boots with (overrides `trajectory.type` inside trajectory_config).
         DeclareLaunchArgument(
-            "trajectory", default_value="figure8",
+            "trajectory",
+            default_value="figure8",
             description="boot trajectory type: hover | figure8 | lemniscate | circle | "
-                        "waypoints | step"),
+            "waypoints | step",
+        ),
     ]
 
     airframe = LaunchConfiguration("airframe")
@@ -97,11 +113,13 @@ def generate_launch_description() -> LaunchDescription:
             trajectory_config,
             {
                 "airframe_params_path": PathJoinSubstitution(
-                    [share_dir, "params", [airframe, "_calibration.yaml"]]),
+                    [share_dir, "params", [airframe, "_calibration.yaml"]]
+                ),
                 "vehicle_interface": vehicle_interface,
                 "auto_arm": ParameterValue(auto_arm, value_type=ParameterType.PARAMETER_BOOL),
                 "use_sim_time": ParameterValue(
-                    use_sim_time, value_type=ParameterType.PARAMETER_BOOL),
+                    use_sim_time, value_type=ParameterType.PARAMETER_BOOL
+                ),
                 "trajectory.type": trajectory,
             },
         ],
@@ -117,10 +135,14 @@ def generate_launch_description() -> LaunchDescription:
         OnProcessStart(
             target_action=node,
             on_start=[
-                EmitEvent(event=ChangeState(
-                    lifecycle_node_matcher=matches_action(node),
-                    transition_id=Transition.TRANSITION_CONFIGURE)),
-            ]),
+                EmitEvent(
+                    event=ChangeState(
+                        lifecycle_node_matcher=matches_action(node),
+                        transition_id=Transition.TRANSITION_CONFIGURE,
+                    )
+                ),
+            ],
+        ),
         condition=IfCondition(auto_activate),
     )
 
@@ -129,10 +151,14 @@ def generate_launch_description() -> LaunchDescription:
             target_lifecycle_node=node,
             goal_state="inactive",
             entities=[
-                EmitEvent(event=ChangeState(
-                    lifecycle_node_matcher=matches_action(node),
-                    transition_id=Transition.TRANSITION_ACTIVATE)),
-            ]),
+                EmitEvent(
+                    event=ChangeState(
+                        lifecycle_node_matcher=matches_action(node),
+                        transition_id=Transition.TRANSITION_ACTIVATE,
+                    )
+                ),
+            ],
+        ),
         condition=IfCondition(auto_activate),
     )
 

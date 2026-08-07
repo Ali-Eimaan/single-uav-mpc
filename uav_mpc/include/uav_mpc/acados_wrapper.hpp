@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// SKELETON — declarations only. See .deepseek/06_SOLVER.md §6.
+// SKELETON — declarations only.
 //
 // RAII wrapper around the acados-generated OCP solver. Owns the capsule, the nlp config, dims,
 // in/out structs and the opts. Nothing outside this file may include acados headers, so the
@@ -29,7 +29,10 @@ enum class SolverStatus
   QpFailure,       ///< QP subproblem infeasible / HPIPM failure
   NanDetected,
   NotInitialised,
-  Timeout          ///< exceeded the wall-clock budget enforced by the wrapper
+  /// RETIRED. Kept only so the numeric values above never shift (they are published in
+  /// uav_mpc/SolverDiagnostics). A missed wall-clock deadline is NOT a solver status — see
+  /// `SolveResult::deadline_missed`. Nothing assigns this value.
+  Timeout
 };
 
 /// Everything nmpc_node needs to know about a solve, for logging and for /nmpc/status.
@@ -43,6 +46,15 @@ struct SolveResult
   double cost{0.0};
   int consecutive_failures{0};    ///< reset on the first Success
   bool reinitialised{false};      ///< true if the wrapper re-initialised the solver this tick
+
+  /// True when `wall_time_ms` exceeded `SolverConfig::solve_time_budget_ms`.
+  ///
+  /// This measures the HOST, not the optimiser: OS scheduling, page faults, a busy core. It is
+  /// reported independently of `status` and deliberately does NOT make `ok()` false — a late
+  /// solve is still a valid solve and its u0 should be applied. Folding it into `status` made a
+  /// few slow ticks trip the failsafe while acados was succeeding every time, which is exactly
+  /// what happens under simulator load.
+  bool deadline_missed{false};
 
   bool ok() const {return status == SolverStatus::Success;}
 };
@@ -63,7 +75,7 @@ struct SolverConfig
   int max_consecutive_failures{5};      ///< beyond this, nmpc_node aborts to PX4 failsafe
   bool warm_start{true};
   bool shift_on_warm_start{true};       ///< shift the previous solution one stage forward
-  ///< per-rotor hover thrust [N]; seeds recovery guess (R2-16)
+  ///< per-rotor hover thrust [N]; seeds recovery guess
   double hover_thrust_per_rotor{0.0};
 };
 

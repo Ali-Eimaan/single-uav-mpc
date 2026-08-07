@@ -1,6 +1,6 @@
 # Controller configuration. The keys and units are final; the weight VALUES are still
 # UNVERIFIED placeholders that must be re-tuned once the solver runs against real dynamics.
-# See docs/TUNING_GUIDE.md and .deepseek/09_CONFIG.md §9.1.
+# See docs/TUNING_GUIDE.md.
 #
 # Every key here is declared as a ROS parameter by NmpcNode::declareParameters(). Keys marked
 # [read-only] are baked into the generated solver and cannot be changed without re-running

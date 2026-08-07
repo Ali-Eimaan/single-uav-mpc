@@ -1,8 +1,8 @@
-# SKELETON — job structure defined, steps marked TODO. See .deepseek/14_CI.md §14.3.
+# SKELETON — job structure defined, steps marked TODO.
 #
 # THE differentiating CI job: PX4 SITL + Gazebo + the NMPC node actually fly a hover, headless,
 # inside the container, and the job asserts on the resulting tracking error. Most candidate
-# repos do not build; this one flies autonomously in CI. See .deepseek/14_CI.md §14.3.
+# repos do not build; this one flies autonomously in CI.
 #
 # Determinism is the budget here: fixed seeds, bounded timeouts, no sleep-and-hope. A smoke
 # test that fails 30% of the time trains everyone to ignore red, which is worse than not
@@ -14,12 +14,22 @@
 
 name: docker smoke test
 
+# MANUAL TRIGGER ONLY, deliberately.
+#
+# This job cannot pass yet and must not run automatically:
+#   *  — nothing bridges Gazebo to either vehicle backend. `sitl.launch.py` defaults to
+#     `vehicle_interface:=px4`, and px4_msgs has no Lyrical Luth release, so the node refuses
+#     to configure. There is no runnable simulation path.
+#   *  — `docker/Dockerfile.sitl` and the image-publishing workflow referenced below do
+#     not exist, so `SIM_IMAGE` cannot be pulled.
+#
+# Running it on every push would guarantee a permanently red badge on the landing page, which
+# is worse than no badge: it trains everyone to ignore red. Acceptance criteria A6/A7 are
+# therefore openly UNMET rather than silently failing.
+#
+# RE-ENABLE the `push` / `pull_request` / `schedule` triggers in the same commit that closes
+#  and , and not before.
 on:
-  push:
-    branches: [main]
-  pull_request:
-  schedule:
-    - cron: "0 3 * * *"   # nightly, to catch upstream PX4/Gazebo drift
   workflow_dispatch:
 
 concurrency:
@@ -30,7 +40,7 @@ env:
   # Pinned in ONE place: this file. colcon_build.yml mirrors PX4_VERSION and verifies the
   # mirror cannot drift (see its "Verify px4_msgs branch" step). px4_msgs MUST match PX4.
   # NOTE: Lyrical Luth is a young distro. Every pin below is a forward-looking guess — verify
-  # each one against the release notes before trusting it (.deepseek/02_ENVIRONMENT.md §2.1).
+  # each one against the release notes before trusting it.
   PX4_VERSION: "v1.16.0"     # UNVERIFIED — confirm which release supports Gazebo Jetty
   GZ_VERSION: "jetty"        # UNVERIFIED — confirm the Lyrical pairing in REP-2000
   ROS_DISTRO: "lyrical"

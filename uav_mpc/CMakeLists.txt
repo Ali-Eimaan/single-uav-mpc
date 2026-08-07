@@ -1,4 +1,4 @@
-# Build system for the uav_mpc package. See .deepseek/03_BUILD_SYSTEM.md §3.
+# Build system for the uav_mpc package.
 cmake_minimum_required(VERSION 3.16)
 project(uav_mpc LANGUAGES C CXX)
 
@@ -79,7 +79,7 @@ if(UAV_MPC_WITH_ACADOS)
   if(NOT DEFINED ENV{ACADOS_SOURCE_DIR})
     message(FATAL_ERROR
       "UAV_MPC_WITH_ACADOS is ON but ACADOS_SOURCE_DIR is not set. Install acados from "
-      "source and export ACADOS_SOURCE_DIR (see .deepseek/02_ENVIRONMENT.md). "
+      "source and export ACADOS_SOURCE_DIR. "
       "To build the stub backend instead, configure with -DUAV_MPC_WITH_ACADOS=OFF.")
   endif()
   set(ACADOS_SOURCE_DIR $ENV{ACADOS_SOURCE_DIR})
@@ -103,7 +103,7 @@ if(UAV_MPC_WITH_ACADOS)
     IMPORTED_LOCATION ${GENERATED_SOLVER_DIR}/libacados_ocp_solver_quadrotor.so)
 
   # Regenerate whenever the model or the structural config changes. Skipped in CI: the
-  # check-only job re-runs codegen to a temp dir and diffs (see .deepseek/14_CI.md §14.1).
+  # check-only job re-runs codegen to a temp dir and diffs.
   if(NOT DEFINED ENV{CI})
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_custom_command(
@@ -233,9 +233,9 @@ if(BUILD_TESTING)
   # UAV_MPC_SOURCE_DIR is the PACKAGE source dir: the tests resolve params/ and config/ below it
   # (e.g. test_dynamics.cpp appends /params/x500_calibration.yaml). It used to point at the repo
   # root, so every test that opened a calibration file threw YAML::BadFile — the tests had
-  # never run. Fixed alongside REVIEW R1-2 so the regression test can execute.
+  # never run. Fixed alongside so the regression test can execute.
 
-  # REVIEW R1-13: the A2 solve-time budgets come from acceptance_criteria.yaml (repo root) —
+  # the A2 solve-time budgets come from acceptance_criteria.yaml (repo root) —
   # single source of truth. scripts/acceptance_criteria_cmake.py is the only place that reads
   # it for C++: it emits KEY=VALUE lines which configure_file substitutes into
   # test/acceptance_criteria.h.in. CI's environment overrides stay the documented exception
@@ -282,7 +282,7 @@ if(BUILD_TESTING)
   target_compile_definitions(test_dynamics PRIVATE
     UAV_MPC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
-  # REVIEW R1-3/R1-4/R1-12: node-level regressions (failsafe thrust normalisation, level
+  # node-level regressions (failsafe thrust normalisation, level
   # takeoff/landing attitude reference, landing latch cleared). Friend fixture — no acados, no
   # backend. Needs rclcpp for the node, so it links the component's deps.
   ament_add_gtest(test_nmpc_node test/test_nmpc_node.cpp)
@@ -303,10 +303,25 @@ if(BUILD_TESTING)
   target_compile_definitions(dynamics_probe PRIVATE
     UAV_MPC_DEFAULT_AIRFRAME_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/params/x500_calibration.yaml")
 
+  # hand the probe's real location to the pytest test.
+  #
+  # test_acados_codegen.py::test_symbolic_dynamics_match_cpp — the A4 criterion, and the most
+  # valuable test in the repo — searches <repo_root>/build/... for this binary. Under colcon the
+  # build tree lives at <workspace>/build/uav_mpc/ while repo_root is <workspace>/src/uav_mpc/,
+  # so that search NEVER succeeds and the test silently skips. It only ever ran for an in-source
+  # plain-cmake build, which is not how this package is built.
+  #
+  # $<TARGET_FILE:dynamics_probe> is correct for every layout, so the env override the test
+  # already supports is the fix. Do not "fix" this by relaxing the skip into a pass.
   ament_add_pytest_test(test_acados_codegen test/test_acados_codegen.py
     TIMEOUT 600
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ENV "UAV_MPC_DYNAMICS_PROBE=$<TARGET_FILE:dynamics_probe>"
   )
+  # The pytest target must not run before the binary it shells out to exists.
+  if(TARGET test_acados_codegen)
+    add_dependencies(test_acados_codegen dynamics_probe)
+  endif()
 endif()
 
 ament_export_include_directories(include)

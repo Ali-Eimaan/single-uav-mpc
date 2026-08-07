@@ -138,7 +138,7 @@ TEST(TrajectoryContinuity, Figure8AnalyticDerivativesMatchFiniteDifferences)
     gen, 0.0, 2.0 * period,
     [](const FlatState & s) {return s.snap;},
     [](const FlatState & s) {return s.jerk;});
-  // R2-13: with continuousFigure8Yaw the yaw is unwrapped, so the full
+  // with continuousFigure8Yaw the yaw is unwrapped, so the full
   // period can be checked without hitting the atan2 branch cut.
   checkScalarDerivative(
     gen, 0.0, 2.0 * period,
@@ -208,7 +208,7 @@ auto oneSidedLimit(F && deriv, double boundary, int k, int side)
 // The ramp-in must not introduce a jerk step at t = 0 or t = ramp_in_time.
 TEST(TrajectoryContinuity, RampInIsC4)
 {
-  // R2-13: use the shipped default ramp_in_time = 3.0 s.  With
+  // use the shipped default ramp_in_time = 3.0 s.  With
   // continuousFigure8Yaw the unwrapped yaw is continuous across the
   // full ramp, so no wrap-aware comparison is needed.
   const TrajectoryGenerator gen(figure8Params(3.0));
@@ -238,7 +238,7 @@ TEST(TrajectoryContinuity, RampInIsC4)
         << "position derivative order " << k << " at t = " << boundary;
     }
     // Yaw C^2: the yaw blend is b_yaw = hover.yaw + S*(traj.yaw - hover.yaw) with
-    // S^(k)(0) = S^(k)(1) = 0 for k >= 1.  R2-13: yaw is now unwrapped, so the
+    // S^(k)(0) = S^(k)(1) = 0 for k >= 1.  yaw is now unwrapped, so the
     // raw derivative comparison is valid without any wrap-aware adjustment.
     for (int k = 0; k <= 2; ++k) {
       auto deriv = [&gen, k](double t) -> double {
@@ -258,7 +258,7 @@ TEST(TrajectoryContinuity, RampInIsC4)
   }
 }
 
-// R2-13: regression test — place the ramp so a yaw wrap (atan2 branch cut) falls
+// regression test — place the ramp so a yaw wrap (atan2 branch cut) falls
 // strictly inside the ramp interval.  With continuousFigure8Yaw this must produce
 // a bounded yaw rate (no instantaneous 2π/0 spike).
 TEST(TrajectoryContinuity, RampInHandlesYawWrap)

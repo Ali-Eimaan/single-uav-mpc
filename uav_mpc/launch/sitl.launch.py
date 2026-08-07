@@ -1,4 +1,4 @@
-"""The one-command demo. See .deepseek/08_LAUNCH.md §8.2.
+"""The one-command demo.
 
 Brings up, in dependency order:
     1. PX4 SITL + Gazebo Jetty (gz_x500 model) with config/px4_overrides.yaml applied
@@ -14,7 +14,6 @@ clever automation.
 """
 
 import os
-import shutil
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -45,13 +44,15 @@ def _fail_immediately(px4_dir: str) -> None:
             f"  cd {px4_dir}\n"
             f"  make px4_sitl gz_x500\n"
             f"Then re-run this launch file. (Override with px4_dir:=<path> or "
-            f"export PX4_DIR=<path>.)")
+            f"export PX4_DIR=<path>.)"
+        )
     build_dir = os.path.join(px4_dir, "build", "px4_sitl_default")
     px4_bin = os.path.join(build_dir, "bin", "px4")
     if not os.path.isfile(px4_bin):
         raise RuntimeError(
             f"PX4 SITL binary missing at '{px4_bin}'. Run `make px4_sitl gz_x500` inside "
-            f"'{px4_dir}' first.")
+            f"'{px4_dir}' first."
+        )
 
 
 def _apply_px4_overrides(context) -> list:
@@ -71,8 +72,9 @@ def _apply_px4_overrides(context) -> list:
     params = (doc or {}).get("px4_parameters", {})
     if not params:
         raise RuntimeError(
-            f"config/px4_overrides.yaml has no 'px4_parameters:' section — refusing to "
-            f"continue; the thrust map depends on these values.")
+            "config/px4_overrides.yaml has no 'px4_parameters:' section — refusing to "
+            "continue; the thrust map depends on these values."
+        )
 
     candidates = [
         os.path.join(px4_dir, "ROMFS", "px4fmu_common", "init.d-posix", "px4-rc.simulator"),
@@ -83,7 +85,8 @@ def _apply_px4_overrides(context) -> list:
         raise RuntimeError(
             f"could not find the PX4 startup extras file under '{px4_dir}' "
             f"(looked in {', '.join(candidates)}). Update launch/sitl.launch.py for the "
-            f"pinned PX4 version.")
+            f"pinned PX4 version."
+        )
 
     with open(extras, "r", encoding="utf-8") as f:
         existing = f.read()
@@ -95,8 +98,10 @@ def _apply_px4_overrides(context) -> list:
         lines.append("# ---- end uav_mpc overrides ----")
         with open(extras, "a", encoding="utf-8") as f:
             f.write("\n" + "\n".join(lines) + "\n")
-        print(f"[sitl.launch.py] applied {len(params)} PX4 params from px4_overrides.yaml "
-              f"to {extras}")
+        print(
+            f"[sitl.launch.py] applied {len(params)} PX4 params from px4_overrides.yaml "
+            f"to {extras}"
+        )
     else:
         print("[sitl.launch.py] PX4 overrides already applied — skipping")
     return []
@@ -110,23 +115,35 @@ def generate_launch_description() -> LaunchDescription:
     _fail_immediately(px4_dir_default)  # parse-time, before anything starts
 
     declared_arguments = [
-        DeclareLaunchArgument("px4_dir", default_value=px4_dir_default,
-                              description="path to the PX4-Autopilot checkout"),
+        DeclareLaunchArgument(
+            "px4_dir",
+            default_value=px4_dir_default,
+            description="path to the PX4-Autopilot checkout",
+        ),
         DeclareLaunchArgument("model", default_value="gz_x500"),
         DeclareLaunchArgument("world", default_value="default"),
-        DeclareLaunchArgument("headless", default_value="false",
-                              description="set HEADLESS=1 in the PX4 environment"),
+        DeclareLaunchArgument(
+            "headless", default_value="false", description="set HEADLESS=1 in the PX4 environment"
+        ),
         DeclareLaunchArgument("agent_port", default_value="8888"),
         DeclareLaunchArgument("rviz", default_value="true"),
-        DeclareLaunchArgument("auto_arm", default_value="true",
-                              description="SITL only — hardware.launch.py defaults to false"),
-        DeclareLaunchArgument("trajectory", default_value="hover",
-                              description="boot trajectory type, passed to the NMPC node"),
+        DeclareLaunchArgument(
+            "auto_arm",
+            default_value="true",
+            description="SITL only — hardware.launch.py defaults to false",
+        ),
+        DeclareLaunchArgument(
+            "trajectory",
+            default_value="hover",
+            description="boot trajectory type, passed to the NMPC node",
+        ),
         DeclareLaunchArgument("airframe", default_value="x500"),
         DeclareLaunchArgument(
-            "vehicle_interface", default_value="px4",
+            "vehicle_interface",
+            default_value="px4",
             description="backend for the NMPC node. SITL is PX4, so this defaults to 'px4', "
-                        "which requires a workspace containing px4_msgs."),
+            "which requires a workspace containing px4_msgs.",
+        ),
     ]
 
     model = LaunchConfiguration("model")
@@ -138,7 +155,6 @@ def generate_launch_description() -> LaunchDescription:
     vehicle_interface = LaunchConfiguration("vehicle_interface")
     trajectory = LaunchConfiguration("trajectory")
     airframe = LaunchConfiguration("airframe")
-    px4_dir = LaunchConfiguration("px4_dir")
 
     # ------------------------------------------------------------------ PX4 ---------------------
     # Apply the parameter overrides FIRST (an OpaqueFunction runs in order), then boot PX4;
@@ -167,8 +183,7 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
         emulate_tty=True,
     )
-    agent_after_px4 = RegisterEventHandler(
-        OnProcessStart(target_action=px4, on_start=[agent]))
+    agent_after_px4 = RegisterEventHandler(OnProcessStart(target_action=px4, on_start=[agent]))
 
     # ------------------------------------------------------------------ NMPC node ---------------
     # Include after the agent is up. A bounded TimerAction is acceptable HERE (documented):
@@ -176,8 +191,7 @@ def generate_launch_description() -> LaunchDescription:
     # vehicle_status; the NMPC node idles in Streaming until offboard + armed, so a slightly
     # early start is harmless — only the *agent* must be up before setpoints flow.
     nmpc_only = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(share_dir, "launch", "nmpc_only.launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(share_dir, "launch", "nmpc_only.launch.py")),
         launch_arguments={
             "airframe": airframe,
             "auto_arm": auto_arm,
@@ -194,7 +208,8 @@ def generate_launch_description() -> LaunchDescription:
 
     # ------------------------------------------------------------------ RViz --------------------
     rviz = Node(
-        package="rviz2", executable="rviz2",
+        package="rviz2",
+        executable="rviz2",
         arguments=["-d", os.path.join(share_dir, "rviz", "nmpc.rviz")],
         output="screen",
         condition=IfCondition(rviz_enabled),
@@ -203,8 +218,7 @@ def generate_launch_description() -> LaunchDescription:
     # ------------------------------------------------------------------ shutdown ----------------
     # If PX4 dies, tear the whole launch down — orphaned px4 processes hold UDP port 8888 and
     # the next launch fails mysteriously (§8.2). launch SIGINTs every process on Shutdown.
-    px4_exit_shutdown = RegisterEventHandler(
-        OnProcessExit(target_action=px4, on_exit=[Shutdown()]))
+    px4_exit_shutdown = RegisterEventHandler(OnProcessExit(target_action=px4, on_exit=[Shutdown()]))
 
     return LaunchDescription(
         declared_arguments

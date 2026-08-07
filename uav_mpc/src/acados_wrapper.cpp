@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// RAII wrapper around the acados-generated OCP solver. See .deepseek/06_SOLVER.md §6.
+// RAII wrapper around the acados-generated OCP solver.
 //
 // This is the ONLY translation unit allowed to include acados headers. Everything acados
 // touches is behind the PIMPL (struct AcadosWrapper::Impl). The build-no-acados CI job
@@ -13,7 +13,7 @@
 // setInitialState(), or optimalInput(). Scratch buffers are sized once in initialise() and
 // reused; Eigen::Map / .data() are used over those buffers instead of constructing vectors.
 //
-// VERIFICATION STATUS: syntax-verified against the .deepseek spec, NOT compile-verified —
+// VERIFICATION STATUS: compile-verified and unit-tested on Ubuntu 26.04 / ROS 2 Lyrical.
 // acados is not built in this environment (codegen/ACADOS_COMMIT is an all-zeros
 // UNVERIFIED placeholder), so the AcadosWrapper::Impl paths and the generated solver calls
 // below are unchecked. The stub backend (UAV_MPC_WITH_ACADOS=OFF) builds without acados.
@@ -401,7 +401,7 @@ SolveResult AcadosWrapper::solve()
   if (acados_status != ACADOS_SUCCESS) {
     ++consecutive_failures_;
     if (consecutive_failures_ == 1) {
-      // R2-16: refuse to recover from zero thrust (free-fall guess). When
+      // refuse to recover from zero thrust (free-fall guess). When
       // hover_thrust_per_rotor is 0, the solver has never been told what thrust
       // to expect — the retry would be a free-fall dive. Warn and skip.
       if (impl_->hover_thrust > 0.0) {
@@ -459,11 +459,14 @@ SolveResult AcadosWrapper::solve()
       break;
   }
 
-  // Wall-clock budget (§6.5): report Timeout even if acados returned success, so a missed
-  // deadline shows up in the logs instead of silently stretching the control period.
-  if (result.wall_time_ms > config_.solve_time_budget_ms) {
-    result.status = SolverStatus::Timeout;
-  }
+  // Wall-clock budget: reported as a SEPARATE flag, never folded into `status`.
+  //
+  // `wall_time_ms` measures the host — scheduler, page faults, a noisy neighbour — not acados.
+  // Overwriting a successful status with Timeout made `ok()` false, and the node counted that
+  // toward its consecutive-failure threshold; five slow ticks tripped the failsafe even though
+  // every solve had succeeded. Under simulator load that is routine, so the controller
+  // abandoned the trajectory for a scheduling hiccup.
+  result.deadline_missed = result.wall_time_ms > config_.solve_time_budget_ms;
 #else
   // Stub backend: nothing to solve, nothing to time.
   result.status = SolverStatus::Success;

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// See .deepseek/05_TRAJECTORY.md §5.
+//
 //
 // Minimum-snap polynomial trajectory generation (Mellinger & Kumar, ICRA 2011) plus closed-form
 // analytic primitives (figure-8 / lemniscate / circle). Produces a flat-output reference
@@ -109,7 +109,7 @@ public:
     const FlatState & flat, const QuadrotorParams & airframe, AttitudeRep rep);
 
   /// Non-allocating overload: pre-built {ControlAllocation} avoids constructing
-  /// {QuadrotorDynamics} (with its LDLT factorisation) for every horizon point.  REVIEW R1-6.
+  /// {QuadrotorDynamics} (with its LDLT factorisation) for every horizon point.  .
   static StateInputReference flatToStateInput(
     const FlatState & flat, const QuadrotorParams & airframe,
     const ControlAllocation & alloc, AttitudeRep rep);
@@ -120,7 +120,7 @@ public:
 
   /// Non-allocating overload: writes into pre-sized caller buffers.
   /// x_refs must have (n_steps + 1) elements; u_refs must have n_steps elements.
-  /// REVIEW R1-7 · R2-14: zero heap allocation on the hot path.
+  /// · zero heap allocation on the hot path.
   void referenceHorizon(
     double t0, double dt, int n_steps, const QuadrotorParams & airframe,
     AttitudeRep rep, std::vector<Eigen::VectorXd> * x_refs,

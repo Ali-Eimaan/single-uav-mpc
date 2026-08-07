@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// ROS 2 lifecycle node running the NMPC at 100 Hz. See .deepseek/07_NODE.md §7.
+// ROS 2 lifecycle node running the NMPC at 100 Hz.
 //
 // This file contains NO autopilot-specific types. Vehicle I/O is delegated to a
 // VehicleInterface backend chosen at runtime by the `vehicle_interface` parameter — "generic"
@@ -128,7 +128,7 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
 
   // --- solver -------------------------------------------------------------------------------
   solver_ = std::make_unique<AcadosWrapper>();
-  solver_config_.hover_thrust_per_rotor = hover_thrust_per_rotor_n_;  // R2-16
+  solver_config_.hover_thrust_per_rotor = hover_thrust_per_rotor_n_;  //
   if (!solver_->initialise(solver_config_, &error)) {
     RCLCPP_ERROR(get_logger(), "on_configure: solver initialisation failed: %s", error.c_str());
     return CallbackReturn::FAILURE;
@@ -138,8 +138,8 @@ CallbackReturn NmpcNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   const int nx = solver_->nx();
   x_refs_.assign(static_cast<std::size_t>(n) + 1, Eigen::VectorXd(nx));
   u_refs_.assign(static_cast<std::size_t>(n), Eigen::VectorXd(solver_->nu()));
-  last_applied_input_ = InputVec::Zero();   // REVIEW R1-7: fixed-size
-  last_x0_ = StateVec::Zero();               // REVIEW R1-7: fixed-size
+  last_applied_input_ = InputVec::Zero();   // fixed-size
+  last_x0_ = StateVec::Zero();               // fixed-size
   // Online parameters stay constant in this version: no wind estimate, nominal mass, level
   // quaternion reference for the geometric attitude error.
   Eigen::VectorXd p = Eigen::VectorXd::Zero(solver_->np());
@@ -789,7 +789,7 @@ void NmpcNode::controlLoop()
   const auto clock = get_clock();
 
   // --- 1. staleness check -> Failsafe ---------------------------------------------------------
-  StateVec x0;  // REVIEW R1-7: fixed-size, no dynamic allocation
+  StateVec x0;  // fixed-size, no dynamic allocation
   std::string why;
   if (!assembleState(&x0, &why)) {
     enterFailsafe(why);
@@ -822,13 +822,29 @@ void NmpcNode::controlLoop()
     const double t_traj = (now - trajectory_start_time_).seconds();
     trajectory_->referenceHorizon(
       t_traj, dt, n, airframe_, AttitudeRep::Quaternion,
-      &x_refs_, &u_refs_);  // R2-14: zero-allocation overload
+      &x_refs_, &u_refs_);  // zero-allocation overload
   }
 
   // --- 5. push into acados + solve ---------------------------------------------------------------
   solver_->setInitialState(x0);
   solver_->setReferenceHorizon(x_refs_, u_refs_);
   const SolveResult result = solver_->solve();
+
+  // Deadline accounting, kept strictly separate from solver failures.
+  //
+  // A missed wall-clock deadline means the HOST was slow, not that the solution is wrong, so it
+  // must never contribute to the failsafe decision. It is still worth knowing about: a sustained
+  // overrun is a real scheduling problem, and the log line says so in those terms.
+  if (result.deadline_missed) {
+    ++consecutive_deadline_misses_;
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *clock, 1000,
+      "solve exceeded the %.1f ms wall-clock budget (%.2f ms), %d in a row — host scheduling, "
+      "not the solver; the solution was still applied",
+      solver_config_.solve_time_budget_ms, result.wall_time_ms, consecutive_deadline_misses_);
+  } else {
+    consecutive_deadline_misses_ = 0;
+  }
 
   // Failure accounting (§6.5): the wrapper tracks consecutive_failures; we own the Failsafe
   // decision on the last one.
@@ -1040,7 +1056,7 @@ void NmpcNode::updateControllerState()
           p = position_enu_;
           v = velocity_enu_;
         }
-      // REVIEW R1-9: the velocity gate is the TAKEOFF threshold, not the landing one — they
+      // the velocity gate is the TAKEOFF threshold, not the landing one — they
       // happened to be equal (0.2) so this was invisible until one of them changed.
         if (std::abs(p.z() - takeoff_altitude_m_) < kTakeoffZWindowM &&
           v.norm() < kTakeoffVThresholdMps)
@@ -1071,7 +1087,7 @@ void NmpcNode::updateControllerState()
           v = velocity_enu_;
         }
         if (p.z() < kLandingZThresholdM && v.norm() < kLandingVThresholdMps) {
-        // REVIEW R1-12: clear the landing latch when the mission actually completes, so a
+        // clear the landing latch when the mission actually completes, so a
         // later re-activation (Streaming -> Takeoff -> Tracking) does not instantly re-trigger
         // Landing from a stale flag. on_activate also clears it; this is the in-loop safety.
           landing_requested_.store(false);
@@ -1133,6 +1149,8 @@ void NmpcNode::publishStatus(const SolveResult & result, const Eigen::VectorXd &
   msg.solver.cost = result.cost;
   msg.solver.consecutive_failures = result.consecutive_failures;
   msg.solver.reinitialised = result.reinitialised;
+  msg.solver.deadline_missed = result.deadline_missed;
+  msg.solver.consecutive_deadline_misses = consecutive_deadline_misses_;
 
   // --- tracking error vs the first reference stage, ENU ----------------------------------------
   if (!x_refs_.empty() && x0.size() >= 6) {
@@ -1147,7 +1165,7 @@ void NmpcNode::publishStatus(const SolveResult & result, const Eigen::VectorXd &
     const double qw = x_refs_.front()(Layout::kAttIdx);
     const double qz = x_refs_.front()(Layout::kAttIdx + 3);
     const double ref_yaw = std::atan2(2.0 * (qw * qz), 1.0 - 2.0 * qz * qz);
-    // REVIEW R1-8: attitude_enu_flu_ is written by onOdometry under state_mutex_; read it under
+    // attitude_enu_flu_ is written by onOdometry under state_mutex_; read it under
     // the same lock instead of tearing a quaternion across a data race with the control thread.
     Eigen::Quaterniond q_meas;
     {

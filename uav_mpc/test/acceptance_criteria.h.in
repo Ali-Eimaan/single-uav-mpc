@@ -1,6 +1,6 @@
 // Generated at configure time from acceptance_criteria.yaml (repo root) by CMake via
 // scripts/acceptance_criteria_cmake.py. Do not edit by hand — edit the YAML instead.
-// Criterion A2 (see .deepseek/01_OVERVIEW.md §1.3): NMPC solve-time budget at 100 Hz.
+// Criterion A2: NMPC solve-time budget at 100 Hz.
 #ifndef UAV_MPC__TEST__ACCEPTANCE_CRITERIA_H_
 #define UAV_MPC__TEST__ACCEPTANCE_CRITERIA_H_
 

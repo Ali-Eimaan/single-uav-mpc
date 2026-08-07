@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// See .deepseek/05_TRAJECTORY.md §5.
+//
 //
 // Minimum-snap polynomial trajectory generation (Mellinger & Kumar, ICRA 2011) plus closed-form
 // analytic primitives (figure-8 / lemniscate / circle). All derivatives up to snap are analytic
@@ -137,7 +137,7 @@ bool yawFromVelocity(
 /// Continuous (unwrapped) yaw for the Gerono figure-8.  The principal yaw from atan2(ẏ, ẋ)
 /// jumps by ±2π when the velocity vector crosses the negative x-axis (ẏ = 0, ẋ < 0).
 /// This happens at ωt = 3π/4 + 2πn and 5π/4 + 2πn for positive amplitudes.
-/// Derived in .deepseek/REVIEW.md R2-13.
+/// Derivation: docs/derivations/differential_flatness.tex.
 double continuousFigure8Yaw(double theta)
 {
   // theta = ωt mod 2π, normalised to [0, 2π)
@@ -271,7 +271,7 @@ std::vector<FlatState> TrajectoryGenerator::sampleHorizon(
 StateInputReference TrajectoryGenerator::flatToStateInput(
   const FlatState & flat, const QuadrotorParams & airframe, AttitudeRep rep)
 {
-  // Delegate to the non-allocating overload (REVIEW R1-6).
+  // Delegate to the non-allocating overload ().
   return flatToStateInput(flat, airframe, ControlAllocation::fromParams(airframe), rep);
 }
 
@@ -326,7 +326,7 @@ StateInputReference TrajectoryGenerator::flatToStateInput(
       ref.state.segment<3>(6) = rpy;
       ref.state.segment<3>(9) = omega;
     }
-    alloc.allocateInverse(0.0, Vec3::Zero(), &ref.input);  // clamped to [min, max]  REVIEW R1-6
+    alloc.allocateInverse(0.0, Vec3::Zero(), &ref.input);  // clamped to [min, max]
     return ref;
   }
 
@@ -421,7 +421,7 @@ StateInputReference TrajectoryGenerator::flatToStateInput(
     ref.state.segment<3>(9) = omega;
   }
 
-  alloc.allocateInverse(T, tau, &ref.input);  // clamped to [min, max]  REVIEW R1-6
+  alloc.allocateInverse(T, tau, &ref.input);  // clamped to [min, max]
   return ref;
 }
 
@@ -432,7 +432,7 @@ std::vector<StateInputReference> TrajectoryGenerator::referenceHorizon(
   out.reserve(static_cast<std::size_t>(n_steps) + 1);
   const std::vector<FlatState> flats = sampleHorizon(t0, dt, n_steps);
   // Pre-build the allocation map once; saves one QuadrotorDynamics construction
-  // (LDLT factorisation) per horizon point.  REVIEW R1-6.
+  // (LDLT factorisation) per horizon point..
   const ControlAllocation alloc = ControlAllocation::fromParams(airframe);
   for (const FlatState & f : flats) {
     out.push_back(flatToStateInput(f, airframe, alloc, rep));
@@ -607,7 +607,7 @@ FlatState TrajectoryGenerator::sampleFigure8(double t) const
   if (params_.yaw_follows_velocity) {
     yawFromVelocity(x_d, y_d, x_dd, y_dd, x_ddd, y_ddd, params_.fixed_yaw,
       &s.yaw, &s.yaw_rate, &s.yaw_accel);
-    // R2-13: the raw atan2 yaw jumps by ±2π at ωt = 3π/4, 5π/4.
+    // the raw atan2 yaw jumps by ±2π at ωt = 3π/4, 5π/4.
     // Unwrap so the ramp-in blend does not see a spurious discontinuity.
     s.yaw = continuousFigure8Yaw(wt);
   } else {

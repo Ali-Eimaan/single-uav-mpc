@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// Node-level regression tests for REVIEW R1-3, R1-4 and R1-12:
+// Node-level regression tests for, and
 //   - the failsafe collective thrust (4 * per-rotor hover) maps to exactly `px4_hover_thrust`
 //   - the takeoff/landing reference horizon commands a LEVEL attitude — identity quaternion
 //     in slot order (w, x, y, z) — for every stage, with yaw equal to the vehicle's yaw
@@ -67,9 +67,9 @@ protected:
   // the fixture, and friendship is not inherited — only members of NmpcNodeTest itself can
   // touch NmpcNode's private members.
 
-  // R1-3: enterFailsafe() publishes a COLLECTIVE thrust of 4 * (m g / 4) = m g — full hover
+  // enterFailsafe() publishes a COLLECTIVE thrust of 4 * (m g / 4) = m g — full hover
   // weight — and normaliseThrust() must map that back to exactly `px4_hover_thrust_` (linear
-  // map, THR_MDL_FAC == 0). Before R1-3 the per-rotor value was passed in directly, which
+  // map, THR_MDL_FAC == 0). Before the per-rotor value was passed in directly, which
   // normalised to px4_hover_thrust_ / 4: the vehicle would have dropped out of the sky.
   void failsafeCollectiveThrustMapsToPx4HoverThrust()
   {
@@ -81,12 +81,12 @@ protected:
 
     EXPECT_NEAR(u, node_.px4_hover_thrust_, 1e-9);
     // Sanity: the pre-fix mistake (per-rotor passed to the collective map) gives 1/4 of the
-    // commanded thrust — exactly the failure R1-3 fixed.
+    // commanded thrust — exactly the failure fixed.
     EXPECT_NEAR(node_.normaliseThrust(per_rotor), node_.px4_hover_thrust_ / 4.0, 1e-9);
   }
 
-  // R1-4: fillTakeoffLandingHorizon() writes the reference quaternion in (w, x, y, z) order,
-  // so the identity puts 1.0 in the FIRST slot. Before R1-4 the code wrote kAttIdx + 3
+  // fillTakeoffLandingHorizon() writes the reference quaternion in (w, x, y, z) order,
+  // so the identity puts 1.0 in the FIRST slot. Before the code wrote kAttIdx + 3
   // (qz = 1), i.e. a 180-degree yaw reference — the vehicle would have spun around on takeoff.
   // The vehicle state here is level (yaw 0), so "identity" and "yaw equals the vehicle's yaw"
   // coincide and both assertions are meaningful.
@@ -140,8 +140,8 @@ protected:
     }
   }
 
-  // R1-12: Sequence Streaming -> Takeoff -> Tracking -> Landing -> Idle, then a second mission
-  // (re-activation, exactly what on_activate() resets) -> Takeoff -> Tracking. Before R1-12 the
+  // Sequence Streaming -> Takeoff -> Tracking -> Landing -> Idle, then a second mission
+  // (re-activation, exactly what on_activate() resets) -> Takeoff -> Tracking. Before the
   // latch stayed true after landing, so the second Tracking instantly re-entered Landing and the
   // vehicle would have descended again instead of flying the new mission.
   void landingClearsRequestedLatchAndSecondMissionPersists()
@@ -174,7 +174,7 @@ protected:
     }
     node_.updateControllerState();
     ASSERT_EQ(node_.controller_state_.load(), ControllerState::Idle);
-    EXPECT_FALSE(node_.landing_requested_.load());   // REVIEW R1-12: latch cleared
+    EXPECT_FALSE(node_.landing_requested_.load());   // latch cleared
 
     // --- second mission: re-activation resets state exactly like on_activate() --------------
     node_.controller_state_.store(ControllerState::Streaming);

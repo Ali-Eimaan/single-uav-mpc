@@ -1,24 +1,36 @@
-# ROS 2 / ament_clang_format compatible style.
-# Verify with: ament_clang_format --config .clang-format uav_mpc/
+# ROS 2 clang-format configuration — EDITOR AID ONLY, not a lint gate.
+#
+# This is a VERBATIM copy of the config shipped inside ament_clang_format
+# (<ros>/lib/pythonX.Y/site-packages/ament_clang_format/configuration/.clang-format).
+# Keep it that way.
+#
+# clang-format is NOT run as a linter for this package, and must not be added
+# back as one. uncrustify and clang-format are competing formatters; `ament_lint_common`
+# ships uncrustify + cpplint and deliberately omits clang-format. On clang-format 21 the two
+# disagree irreconcilably (`{ return x; }` vs `{return x;}`, `template <T>` vs `template<T>`),
+# so enabling both makes criterion A9 unsatisfiable. The authoritative formatter for this
+# package is uncrustify.
+#
+# Use this file to keep your editor roughly in line, then let uncrustify have the last word:
+#   ament_uncrustify --linelength 100 --reformat uav_mpc/src uav_mpc/include uav_mpc/test
+#   ament_cpplint --linelength 100 uav_mpc/src uav_mpc/include uav_mpc/test
 ---
 Language: Cpp
 BasedOnStyle: Google
 
 AccessModifierOffset: -2
 AlignAfterOpenBracket: AlwaysBreak
-AllowShortFunctionsOnASingleLine: InlineOnly
 BraceWrapping:
   AfterClass: true
   AfterFunction: true
-  AfterNamespace: false
+  AfterNamespace: true
   AfterStruct: true
-  BeforeCatch: true
-  BeforeElse: true
+  AfterEnum: true
 BreakBeforeBraces: Custom
 ColumnLimit: 100
 ConstructorInitializerIndentWidth: 0
 ContinuationIndentWidth: 2
 DerivePointerAlignment: false
 PointerAlignment: Middle
-ReflowComments: true
-IncludeBlocks: Preserve
+ReflowComments: false
+...

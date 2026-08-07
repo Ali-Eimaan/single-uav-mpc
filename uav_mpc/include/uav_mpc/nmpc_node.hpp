@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //
 // ROS 2 lifecycle node running the NMPC at 100 Hz.
-// See .deepseek/07_NODE.md §7.
+//
 //
 // This node contains NO autopilot-specific types. All vehicle I/O goes through
 // VehicleInterface (see vehicle_interface.hpp), selected at runtime by the `vehicle_interface`
@@ -123,13 +123,13 @@ private:
   void controlLoop();
 
   /// Build the solver state vector from the cached PX4 messages, in the active AttitudeRep.
-  /// Returns false if any source is stale beyond `state_timeout_`.  REVIEW R1-7: fixed-size.
+  /// Returns false if any source is stale beyond `state_timeout_`.  fixed-size.
   bool assembleState(StateVec * x0, std::string * why_stale);
 
   /// Forward-integrate x0 by the measured sensor+actuator latency using the last applied input,
   /// so the OCP starts from where the vehicle will be when the command lands.
   StateVec compensateLatency(
-    const StateVec & x0, double latency_s) const;  // REVIEW R1-7: fixed-size
+    const StateVec & x0, double latency_s) const;  // fixed-size
 
   /// u0 [per-rotor thrust, N] -> frame-neutral attitude+thrust command (ENU/FLU). The attitude
   /// is the optimiser's intent at stage 1, which already accounts for the rate dynamics (§7.6).
@@ -210,10 +210,13 @@ private:
   StateVec last_x0_{StateVec::Zero()};      ///< last assembled state, for failsafe resetToHover
   Eigen::Quaterniond last_q_d_enu_{
     Eigen::Quaterniond::Identity()};  ///< last sent setpoint attitude
-  // pre-sized scratch (no alloc in loop)  REVIEW R1-7
+  // pre-sized scratch (no alloc in loop)
   StateVec x0_scratch_{StateVec::Zero()};
   int offboard_stream_counter_{0};
   int consecutive_solver_failures_{0};
+  /// Counted separately from solver failures and deliberately NOT a failsafe trigger: a
+  /// missed deadline is a host-scheduling event, not a bad solution.
+  int consecutive_deadline_misses_{0};
   /// [N] per-rotor hover thrust, m*g/4 -- solver seed + takeoff ref
   double hover_thrust_per_rotor_n_{0.0};
 

@@ -1,4 +1,4 @@
-"""The README demo. See .deepseek/08_LAUNCH.md §8.3.
+"""The README demo.
 
 Includes sitl.launch.py, then commands a figure-8 once the vehicle is hovering, and records a
 rosbag of everything the analysis notebooks need.
@@ -20,6 +20,7 @@ from launch.actions import ExecuteProcess
 from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 
 PACKAGE = "uav_mpc"
 STATE_TRACKING = 3  # uav_mpc/msg/NmpcStatus.controller_state
@@ -62,12 +63,16 @@ def _command_figure8(context) -> list:
     while time.monotonic() < deadline:
         rclpy.spin_once(node, timeout_sec=0.1)
         if statuses["state"] == STATE_TRACKING:
-            print(f"[figure8.launch.py] controller reports STATE_TRACKING after "
-                  f"{takeoff_wait - (deadline - time.monotonic()):.1f}s")
+            print(
+                f"[figure8.launch.py] controller reports STATE_TRACKING after "
+                f"{takeoff_wait - (deadline - time.monotonic()):.1f}s"
+            )
             break
     else:
-        print(f"[figure8.launch.py] WARNING: never saw STATE_TRACKING within {takeoff_wait}s — "
-              f"commanding the figure-8 anyway (bounded fallback)")
+        print(
+            f"[figure8.launch.py] WARNING: never saw STATE_TRACKING within {takeoff_wait}s — "
+            f"commanding the figure-8 anyway (bounded fallback)"
+        )
     node.destroy_subscription(sub)
 
     # --- command the figure-8 ------------------------------------------------------------------
@@ -120,23 +125,34 @@ def _command_figure8(context) -> list:
     node.destroy_node()
 
     if resp is None or not resp.success:
-        print(f"[figure8.launch.py] ERROR: set_trajectory rejected: {resp.message if resp else 'no response'}")
+        reason = resp.message if resp else "no response"
+        print(f"[figure8.launch.py] ERROR: set_trajectory rejected: {reason}")
         return []
-    print(f"[figure8.launch.py] figure-8 commanded ({amplitude} m / {period} s lap, "
-          f"expected duration {resp.expected_duration}s, "
-          f"dynamically feasible: {resp.dynamically_feasible})")
+    print(
+        f"[figure8.launch.py] figure-8 commanded ({amplitude} m / {period} s lap, "
+        f"expected duration {resp.expected_duration}s, "
+        f"dynamically feasible: {resp.dynamically_feasible})"
+    )
 
     # --- optional bag recording ----------------------------------------------------------------
     if not record:
         return []
-    out_dir = os.path.abspath(os.path.join(
-        "analysis", "output", f"figure8_{time.strftime('%Y%m%d_%H%M%S')}"))
+    out_dir = os.path.abspath(
+        os.path.join("analysis", "output", f"figure8_{time.strftime('%Y%m%d_%H%M%S')}")
+    )
     duration = takeoff_wait + laps * period + 10.0
     bag = ExecuteProcess(
         cmd=[
-            "ros2", "bag", "record", "-o", out_dir, "--duration", str(int(duration)),
+            "ros2",
+            "bag",
+            "record",
+            "-o",
+            out_dir,
+            "--duration",
+            str(int(duration)),
             "/nmpc_node/status",
-            "/nmpc_node/reference_path",   # §12.2: plot the reference actually given, not the analytic curve
+            # §12.2: plot the reference actually given, not the analytic curve.
+            "/nmpc_node/reference_path",
             "/fmu/out/vehicle_local_position",
             "/fmu/out/vehicle_attitude",
             "/fmu/in/vehicle_attitude_setpoint",
@@ -153,25 +169,40 @@ def generate_launch_description() -> LaunchDescription:
     share_dir = get_package_share_directory(PACKAGE)
 
     declared_arguments = [
-        DeclareLaunchArgument("aggressive", default_value="false",
-                              description="3 m / 5 s preset (~6 m/s, ~35 deg bank)"),
-        DeclareLaunchArgument("record", default_value="false",
-                              description="ros2 bag record into analysis/output/figure8_<ts>"),
-        DeclareLaunchArgument("laps", default_value="3",
-                              description="figure-8 laps (used for the bag duration)"),
-        DeclareLaunchArgument("takeoff_wait", default_value="12.0",
-                              description="bounded fallback wait for arm + takeoff [s]"),
-        DeclareLaunchArgument("headless", default_value="false",
-                              description="forwarded to sitl.launch.py (HEADLESS=1 for PX4)"),
-        DeclareLaunchArgument("rviz", default_value="false",
-                              description="forwarded to sitl.launch.py (GUI off by default)"),
+        DeclareLaunchArgument(
+            "aggressive",
+            default_value="false",
+            description="3 m / 5 s preset (~6 m/s, ~35 deg bank)",
+        ),
+        DeclareLaunchArgument(
+            "record",
+            default_value="false",
+            description="ros2 bag record into analysis/output/figure8_<ts>",
+        ),
+        DeclareLaunchArgument(
+            "laps", default_value="3", description="figure-8 laps (used for the bag duration)"
+        ),
+        DeclareLaunchArgument(
+            "takeoff_wait",
+            default_value="12.0",
+            description="bounded fallback wait for arm + takeoff [s]",
+        ),
+        DeclareLaunchArgument(
+            "headless",
+            default_value="false",
+            description="forwarded to sitl.launch.py (HEADLESS=1 for PX4)",
+        ),
+        DeclareLaunchArgument(
+            "rviz",
+            default_value="false",
+            description="forwarded to sitl.launch.py (GUI off by default)",
+        ),
     ]
 
     sitl = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(share_dir, "launch", "sitl.launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(share_dir, "launch", "sitl.launch.py")),
         launch_arguments={
-            "trajectory": "hover",   # boot hovering; the figure-8 is commanded below
+            "trajectory": "hover",  # boot hovering; the figure-8 is commanded below
             "auto_arm": "true",
             "airframe": "x500",
             "headless": LaunchConfiguration("headless"),

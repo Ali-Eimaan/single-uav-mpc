@@ -1,0 +1,29 @@
+# Python tooling configuration.
+#
+# black defaults to a 88-character line, but every other convention in this
+# repository is 100 — `setup.cfg` sets flake8 `max-line-length = 100`, `.clang-format` sets
+# `ColumnLimit: 100`, and the C++ linters run with `--linelength 100`. Left at its default,
+# `black --check` in CI reformatted 10 of 11 Python files purely to satisfy a width nothing
+# else in the project uses.
+#
+# Pinning black to 100 makes the two Python gates agree: black's output is, by construction,
+# within flake8's limit. Do not lower this without lowering the other three as well.
+#
+# flake8 settings deliberately stay in setup.cfg — flake8 does not read pyproject.toml, and
+# duplicating them here would create exactly the drift  exists to prevent.
+
+[tool.black]
+line-length = 100
+# NOTE: no `target-version`. black 25.1.0 only knows up to "py313" and errors out on "py314",
+# so pinning it to the interpreter this project targets breaks the tool. Auto-detection from
+# the source is correct here and needs no maintenance when black gains py314.
+# Match the paths the CI job formats (.github/workflows/format_check.yml).
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    codegen/codegen_output
+  | build
+  | install
+  | log
+)/
+'''

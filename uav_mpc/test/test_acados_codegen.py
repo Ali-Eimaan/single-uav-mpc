@@ -1,5 +1,5 @@
 """Verifies that the checked-in solver is exactly what codegen/ produces from the current
-model and config. See .deepseek/10_TESTS.md §10.3.
+model and config.
 
 A stale generated solver that still builds is the most dangerous failure mode in this repo:
 the code flies, but not the model you documented. Every test here either detects that drift
@@ -25,19 +25,65 @@ import numpy as np
 import pytest
 
 # --- module-level setup: make `codegen` importable and skip when its deps are missing ----
-_HERE = Path(__file__).resolve().parent          # uav_mpc/test
-_UAV_MPC = _HERE.parent                          # uav_mpc
-_REPO_ROOT = _UAV_MPC.parent                     # repository root
+_HERE = Path(__file__).resolve().parent  # uav_mpc/test
+_UAV_MPC = _HERE.parent  # uav_mpc
+_REPO_ROOT = _UAV_MPC.parent  # repository root
 
 for _p in (_REPO_ROOT, _REPO_ROOT / "codegen"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-casadi = pytest.importorskip("casadi")           # noqa: F841  (imported for the module)
-pytest.importorskip("acados_template")
+# this module must remain COLLECTABLE even when its dependencies are absent.
+#
+# The obvious spellings — `pytest.importorskip(...)` at module scope, or
+# `pytest.skip(..., allow_module_level=True)` — abort collection. pytest 9 then exits with
+# code 4 ("found no collectors"), ctest sees a non-zero exit, and the test is reported as a
+# FAILURE even though the xunit file correctly says "skipped". That is precisely what the
+# `build-no-acados` CI job does, so that job fails on a machine without acados.
+#
+# Instead: probe the dependencies, keep the module importable, and let `pytestmark` mark every
+# test skipped. Collection succeeds, pytest exits 0, and ctest reports a clean skip.
+#
+# Two independent things are probed, because they fail independently:
+#   1. the Python packages (casadi, acados_template)
+#   2. the acados NATIVE libraries — a machine can have acados_template pip-installed while
+#      libacados.so is missing from the loader path, which otherwise surfaces deep inside a
+#      test as a bare "OSError: libhpipm.so: cannot open shared object file".
+_SKIP_REASON = None
 
-from codegen import generate_acados_solver  # noqa: E402
-from codegen import quadrotor_model          # noqa: E402
+try:
+    import casadi  # noqa: F401  (imported for the module)
+except ImportError as _exc:  # pragma: no cover - env dependent
+    _SKIP_REASON = f"casadi is not installed ({_exc})"
+
+if _SKIP_REASON is None:
+    try:
+        import acados_template  # noqa: F401
+    except ImportError as _exc:  # pragma: no cover - env dependent
+        _SKIP_REASON = f"acados_template is not installed ({_exc})"
+
+if _SKIP_REASON is None:
+    try:
+        import ctypes
+
+        ctypes.CDLL("libacados.so")
+    except OSError as _exc:  # pragma: no cover - env dependent
+        _SKIP_REASON = (
+            f"acados_template imports but the acados native libraries are not loadable ({_exc}). "
+            "Build acados and put its lib/ on LD_LIBRARY_PATH: "
+            "export ACADOS_SOURCE_DIR=<acados>; "
+            "export LD_LIBRARY_PATH=$ACADOS_SOURCE_DIR/lib:$LD_LIBRARY_PATH"
+        )
+
+if _SKIP_REASON is None:
+    from codegen import generate_acados_solver  # noqa: E402
+    from codegen import quadrotor_model  # noqa: E402
+else:  # pragma: no cover - env dependent
+    generate_acados_solver = None
+    quadrotor_model = None
+
+# Applies to every test in this module; harmless (empty) when the dependencies are present.
+pytestmark = pytest.mark.skipif(_SKIP_REASON is not None, reason=_SKIP_REASON or "")
 
 
 # --------------------------------------------------------------------------------------- fixtures
@@ -48,8 +94,7 @@ def repo_root() -> Path:
     """Absolute path to the repository root (three levels up from this test file)."""
     assert _REPO_ROOT.is_dir(), f"repo root {_REPO_ROOT} is not a directory"
     for required in ("codegen", "uav_mpc"):
-        assert (_REPO_ROOT / required).is_dir(), \
-            f"repo root {_REPO_ROOT} is missing {required}/"
+        assert (_REPO_ROOT / required).is_dir(), f"repo root {_REPO_ROOT} is missing {required}/"
     return _REPO_ROOT
 
 
@@ -73,7 +118,8 @@ def _generated_json(repo_root: Path) -> dict:
         pytest.fail(
             "generated solver missing — run:\n"
             f"  python codegen/generate_acados_solver.py --airframe {_airframe_path(repo_root)} "
-            f"--config {_config_path(repo_root)} --output codegen/codegen_output")
+            f"--config {_config_path(repo_root)} --output codegen/codegen_output"
+        )
     return json.loads(path.read_text())
 
 
@@ -124,8 +170,9 @@ def test_casadi_model_builds(repo_root):
     constants = _constants(repo_root)
     model = quadrotor_model.export_quadrotor_model(constants, "quaternion")
 
-    assert model.name == "quadrotor", \
-        f"model name must be 'quadrotor' (generated symbols derive from it), got {model.name!r}"
+    assert (
+        model.name == "quadrotor"
+    ), f"model name must be 'quadrotor' (generated symbols derive from it), got {model.name!r}"
     assert model.x.shape == (13, 1), f"x.shape == {model.x.shape}, expected (13, 1)"
     assert model.u.shape == (4, 1), f"u.shape == {model.u.shape}, expected (4, 1)"
     assert model.p.shape == (8, 1), f"p.shape == {model.p.shape}, expected (8, 1)"
@@ -133,15 +180,18 @@ def test_casadi_model_builds(repo_root):
     # f_expl must depend on all three symbols ...
     assert casadi.depends_on(model.f_expl_expr, model.x), "f_expl must depend on x"
     assert casadi.depends_on(model.f_expl_expr, model.u), "f_expl must depend on u"
-    assert casadi.depends_on(model.f_expl_expr, model.p), \
-        "f_expl must depend on p (wind + mass_scale enter through the drag term)"
+    assert casadi.depends_on(
+        model.f_expl_expr, model.p
+    ), "f_expl must depend on p (wind + mass_scale enter through the drag term)"
     # ... and on nothing else: every free variable must be a component of x, u or p.
     free_vars = casadi.symvar(model.f_expl_expr)
     assert len(free_vars) > 0, "f_expl has no free variables — model is constant?"
     for sv in free_vars:
-        assert (casadi.depends_on(sv, model.x) or casadi.depends_on(sv, model.u)
-                or casadi.depends_on(sv, model.p)), \
-            f"free variable {sv.name()} lies outside x/u/p — model has an undeclared input"
+        assert (
+            casadi.depends_on(sv, model.x)
+            or casadi.depends_on(sv, model.u)
+            or casadi.depends_on(sv, model.p)
+        ), f"free variable {sv.name()} lies outside x/u/p — model has an undeclared input"
 
 
 def test_symbolic_dynamics_match_cpp(repo_root):
@@ -154,15 +204,15 @@ def test_symbolic_dynamics_match_cpp(repo_root):
     if probe is None:
         pytest.skip(
             "dynamics_probe binary not found — build tests first "
-            "(colcon build --packages-select uav_mpc --cmake-args -DBUILD_TESTING=ON)")
+            "(colcon build --packages-select uav_mpc --cmake-args -DBUILD_TESTING=ON)"
+        )
 
     constants = _constants(repo_root)
     model = quadrotor_model.export_quadrotor_model(constants, "quaternion")
-    f_casadi = casadi.Function(
-        "f", [model.x, model.u, model.p], [model.f_expl_expr])
+    f_casadi = casadi.Function("f", [model.x, model.u, model.p], [model.f_expl_expr])
     p = _default_params()
 
-    rng = np.random.RandomState(42)   # deterministic across runs
+    rng = np.random.RandomState(42)  # deterministic across runs
     n_samples = 200
     rows = []
     expected = []
@@ -180,30 +230,38 @@ def test_symbolic_dynamics_match_cpp(repo_root):
     result = subprocess.run(
         [str(probe), str(_airframe_path(repo_root))],
         input="\n".join(rows) + "\n",
-        capture_output=True, text=True, check=False)
-    assert result.returncode == 0, \
-        f"dynamics_probe failed ({result.returncode}): {result.stderr[:2000]}"
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (
+        result.returncode == 0
+    ), f"dynamics_probe failed ({result.returncode}): {result.stderr[:2000]}"
 
     lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
-    assert len(lines) == n_samples, \
-        f"dynamics_probe returned {len(lines)} rows, expected {n_samples}"
+    assert (
+        len(lines) == n_samples
+    ), f"dynamics_probe returned {len(lines)} rows, expected {n_samples}"
 
     worst_abs = 0.0
     worst_rel = 0.0
     for casadi_row, cpp_line in zip(expected, lines):
         cpp = np.array([float(v) for v in cpp_line.split()])
-        assert cpp.shape == casadi_row.shape, \
-            f"shape mismatch: casadi {casadi_row.shape} vs cpp {cpp.shape}"
+        assert (
+            cpp.shape == casadi_row.shape
+        ), f"shape mismatch: casadi {casadi_row.shape} vs cpp {cpp.shape}"
         diff = np.abs(cpp - casadi_row)
         worst_abs = max(worst_abs, float(diff.max()))
         with np.errstate(divide="ignore", invalid="ignore"):
             rel = diff / np.maximum(np.abs(casadi_row), 1e-12)
             worst_rel = max(worst_rel, float(rel.max()))
-    assert worst_abs < 1e-9, \
-        f"CasADi vs C++ dynamics drift: max abs diff {worst_abs:.3e} (limit 1e-9). " \
+    assert worst_abs < 1e-9, (
+        f"CasADi vs C++ dynamics drift: max abs diff {worst_abs:.3e} (limit 1e-9). "
         "quadrotor_model.py and quadrotor_dynamics.cpp must agree; fix both in one commit."
-    assert worst_rel < 1e-9, \
-        f"CasADi vs C++ dynamics drift: max rel diff {worst_rel:.3e} (limit 1e-9)"
+    )
+    assert (
+        worst_rel < 1e-9
+    ), f"CasADi vs C++ dynamics drift: max rel diff {worst_rel:.3e} (limit 1e-9)"
 
 
 def test_generated_code_is_up_to_date(repo_root):
@@ -216,14 +274,19 @@ def test_generated_code_is_up_to_date(repo_root):
         pytest.fail(
             "codegen/MODEL_HASH is missing — generate the solver and commit the hash:\n"
             f"  python codegen/generate_acados_solver.py --airframe {_airframe_path(repo_root)} "
-            f"--config {_config_path(repo_root)} --output codegen/codegen_output")
+            f"--config {_config_path(repo_root)} --output codegen/codegen_output"
+        )
     recorded = hash_file.read_text().strip()
 
     assert recorded == fresh, (
-        "generated solver is stale: codegen/MODEL_HASH records " + recorded[:12] +
-        " but the current model hashes to " + fresh[:12] + ". Regenerate with:\n"
+        "generated solver is stale: codegen/MODEL_HASH records "
+        + recorded[:12]
+        + " but the current model hashes to "
+        + fresh[:12]
+        + ". Regenerate with:\n"
         f"  python codegen/generate_acados_solver.py --airframe {_airframe_path(repo_root)} "
-        f"--config {_config_path(repo_root)} --output codegen/codegen_output")
+        f"--config {_config_path(repo_root)} --output codegen/codegen_output"
+    )
 
 
 def test_codegen_is_deterministic(tmp_path, repo_root):
@@ -252,21 +315,25 @@ def test_codegen_is_deterministic(tmp_path, repo_root):
         generate_acados_solver._generate(ocp, out, build=False)
         generate_acados_solver.strip_nondeterminism(out)
         generate_acados_solver.write_provenance(
-            out, "0000000000000000000000000000000000000000",
+            out,
+            "0000000000000000000000000000000000000000",
             quadrotor_model.model_hash(constants, "quaternion"),
-            _airframe_path(repo_root), _config_path(repo_root))
+            _airframe_path(repo_root),
+            _config_path(repo_root),
+        )
         return out
 
     run1 = run_once("run1")
     run2 = run_once("run2")
 
     text_suffixes = {".c", ".h", ".json", ".txt"}
-    files1 = {p.relative_to(run1) for p in run1.rglob("*")
-              if p.is_file() and p.suffix in text_suffixes}
-    files2 = {p.relative_to(run2) for p in run2.rglob("*")
-              if p.is_file() and p.suffix in text_suffixes}
-    assert files1 == files2, \
-        f"codegen is non-deterministic — file sets differ: {files1 ^ files2}"
+    files1 = {
+        p.relative_to(run1) for p in run1.rglob("*") if p.is_file() and p.suffix in text_suffixes
+    }
+    files2 = {
+        p.relative_to(run2) for p in run2.rglob("*") if p.is_file() and p.suffix in text_suffixes
+    }
+    assert files1 == files2, f"codegen is non-deterministic — file sets differ: {files1 ^ files2}"
     for rel in sorted(files1):
         a = (run1 / rel).read_bytes()
         b = (run2 / rel).read_bytes()
@@ -283,20 +350,21 @@ def test_ocp_dimensions_match_config(repo_root):
     nx_json = dims.get("nx")
     nu_json = dims.get("nu")
     np_json = dims.get("np")
-    assert n_json == int(cfg["horizon_steps"]), \
-        f"N mismatch: generated {n_json} vs config {cfg['horizon_steps']}"
+    assert n_json == int(
+        cfg["horizon_steps"]
+    ), f"N mismatch: generated {n_json} vs config {cfg['horizon_steps']}"
     assert nu_json == 4, f"nu mismatch: generated {nu_json} vs expected 4"
 
     nx_expected = 13  # quaternion attitude representation
-    assert nx_json == nx_expected, \
-        f"nx mismatch: generated {nx_json} vs expected {nx_expected}"
+    assert nx_json == nx_expected, f"nx mismatch: generated {nx_json} vs expected {nx_expected}"
     assert np_json == 8, f"np mismatch: generated {np_json} vs expected 8 (wind, mass_scale, q_ref)"
 
     tf = ocp_json.get("solver_options", {}).get("tf")
     if tf is None:  # defensive: some acados versions carry tf in dims
         tf = dims.get("tf")
-    assert tf is not None and abs(float(tf) - float(cfg["horizon_time"])) < 1e-9, \
-        f"tf mismatch: generated {tf} vs config {cfg['horizon_time']}"
+    assert (
+        tf is not None and abs(float(tf) - float(cfg["horizon_time"])) < 1e-9
+    ), f"tf mismatch: generated {tf} vs config {cfg['horizon_time']}"
 
     # Header defines must agree too (generated C macros are the load-bearing interface).
     header = _generated_dir(repo_root) / "acados_solver_quadrotor.h"
@@ -307,8 +375,9 @@ def test_ocp_dimensions_match_config(repo_root):
             # acados >= 0.6.0: #define OCP_QUADROTOR_<HASH>_NX 13
             m = re.search(rf"#define\s+\S*{macro}\s+(\d+)", text)
             assert m, f"{macro} not found in {header}"
-            assert int(m.group(1)) == expected, \
-                f"{macro} mismatch: header defines {m.group(1)}, expected {expected}"
+            assert (
+                int(m.group(1)) == expected
+            ), f"{macro} mismatch: header defines {m.group(1)}, expected {expected}"
 
 
 def test_solver_options_are_realtime(repo_root):
@@ -326,23 +395,26 @@ def test_solver_options_are_realtime(repo_root):
     }
     for key, expected in realtime_settings.items():
         actual = so.get(key)
-        assert actual == expected, \
-            f"solver option {key}: generated {actual!r}, expected {expected!r} — " \
+        assert actual == expected, (
+            f"solver option {key}: generated {actual!r}, expected {expected!r} — "
             "a debug configuration was committed"
+        )
 
     iter_max = so.get("qp_solver_iter_max")
-    assert isinstance(iter_max, int) and 0 < iter_max <= 100, \
-        f"qp_solver_iter_max = {iter_max} is outside (0, 100]"
-    assert so.get("nlp_solver_max_iter") == 1, \
-        "nlp_solver_max_iter must be 1 (single SQP iteration per sample, RTI)"
+    assert (
+        isinstance(iter_max, int) and 0 < iter_max <= 100
+    ), f"qp_solver_iter_max = {iter_max} is outside (0, 100]"
+    assert (
+        so.get("nlp_solver_max_iter") == 1
+    ), "nlp_solver_max_iter must be 1 (single SQP iteration per sample, RTI)"
     num_stages = so.get("sim_method_num_stages")
     # acados >= 0.6.0: per-stage list; earlier: scalar
     if isinstance(num_stages, list):
-        assert all(s == 4 for s in num_stages), \
-            f"sim_method_num_stages: all entries must be 4 (RK4), got {num_stages}"
+        assert all(
+            s == 4 for s in num_stages
+        ), f"sim_method_num_stages: all entries must be 4 (RK4), got {num_stages}"
     else:
-        assert num_stages == 4, \
-            "sim_method_num_stages must be 4 (RK4)"
+        assert num_stages == 4, "sim_method_num_stages must be 4 (RK4)"
 
 
 @pytest.mark.slow
@@ -365,36 +437,37 @@ def test_generated_solver_solves_hover(repo_root):
         pytest.fail(
             "generated solver missing — run:\n"
             f"  python codegen/generate_acados_solver.py --airframe {_airframe_path(repo_root)} "
-            f"--config {_config_path(repo_root)} --output codegen/codegen_output")
+            f"--config {_config_path(repo_root)} --output codegen/codegen_output"
+        )
 
     # Point the formulation at the committed solver and load it *without* regenerating.
     # `check_reuse_possible=False` guarantees this test never writes into the repo.
     ocp.code_export_directory = str(generated)
     solver = AcadosOcpSolver(
-        ocp, build=False, generate=False, check_reuse_possible=False, verbose=False)
+        ocp, build=False, generate=False, check_reuse_possible=False, verbose=False
+    )
 
-    n = int(cfg["horizon_steps"])          # 20
-    dt = float(cfg["horizon_time"]) / n    # 50 ms
+    n = int(cfg["horizon_steps"])  # 20
+    dt = float(cfg["horizon_time"]) / n  # 50 ms
     nx = model.x.shape[0]
     ny = 16
     ny_e = 12
 
     pref = np.array([1.0, 1.0, 1.5])
-    hover_thrust = constants.mass * constants.gravity / 4.0   # 4.9033 N per rotor
+    hover_thrust = constants.mass * constants.gravity / 4.0  # 4.9033 N per rotor
     p = _default_params()
 
     # yref: [p; v; e_q; omega; u], yref_e: [p; v; e_q; omega].
     yref = np.zeros(ny)
     yref[:3] = pref
     yref[3:6] = 0.0
-    yref[6:9] = 0.0        # identity q_ref => zero attitude error at reference
+    yref[6:9] = 0.0  # identity q_ref => zero attitude error at reference
     yref[9:12] = 0.0
     yref[12:16] = hover_thrust
     yref_e = np.zeros(ny_e)
     yref_e[:3] = pref
 
-    f_plant = casadi.Function(
-        "plant", [model.x, model.u, model.p], [model.f_expl_expr])
+    f_plant = casadi.Function("plant", [model.x, model.u, model.p], [model.f_expl_expr])
 
     def plant_step(x: np.ndarray, u: np.ndarray) -> np.ndarray:
         x = np.asarray(x, dtype=float).reshape(-1)
@@ -424,7 +497,7 @@ def test_generated_solver_solves_hover(repo_root):
     x = np.zeros(nx)
     x[:3] = pref - 0.1
     x[3:6] = 0.0
-    x[6] = 1.0           # level attitude
+    x[6] = 1.0  # level attitude
     x[10:13] = 0.0
     set_initial_state(x)
 
@@ -432,7 +505,7 @@ def test_generated_solver_solves_hover(repo_root):
     for _ in range(200):
         for stage in range(n):
             solver.set(stage, "yref", yref)
-        solver.set(n, "yref", yref_e)          # terminal cost reference (yref_e at N)
+        solver.set(n, "yref", yref_e)  # terminal cost reference (yref_e at N)
         for stage in range(n + 1):
             solver.set(stage, "p", p)
         set_initial_state(x)
@@ -447,8 +520,8 @@ def test_generated_solver_solves_hover(repo_root):
         solver.set(n - 1, "u", hover_thrust * np.ones(4))
 
     err = float(np.linalg.norm(x[:3] - pref))
-    assert err < 1e-2, \
-        f"closed-loop hover diverged: final position error {err:.4e} m (limit 1e-2)"
+    assert err < 1e-2, f"closed-loop hover diverged: final position error {err:.4e} m (limit 1e-2)"
     failures = [i for i, s in enumerate(statuses) if s != 0]
-    assert not failures, \
-        f"non-zero solver status at steps {failures[:10]}... ({len(failures)} of 200)"
+    assert (
+        not failures
+    ), f"non-zero solver status at steps {failures[:10]}... ({len(failures)} of 200)"

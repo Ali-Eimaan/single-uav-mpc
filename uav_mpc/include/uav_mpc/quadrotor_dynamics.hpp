@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //
 // Declarations for the templated 12/13-state quadrotor rigid-body dynamics on SE(3).
-// See .deepseek/04_DYNAMICS.md §4. The same equations are mirrored symbolically in
+// The same equations are mirrored symbolically in
 // codegen/quadrotor_model.py; the C++ version here is the *ground truth* used by the
 // simulation-free unit tests and by the internal forward-integration used for one-step
 // state prediction (latency compensation).
@@ -147,7 +147,7 @@ private:
 /// Lightweight control-allocation helper — holds only the cached inverse of the quad-X mixer
 /// and the rotor thrust bounds.  This lets hot-path callers (trajectory horizon sampling) avoid
 /// constructing a full {QuadrotorDynamics} (which LDLT-factors the inertia tensor) when all they
-/// need is the allocation map.  REVIEW R1-6.
+/// need is the allocation map.  .
 struct ControlAllocation
 {
   Eigen::Matrix<double, 4, 4> inverse{Eigen::Matrix<double, 4, 4>::Zero()};

@@ -5,7 +5,7 @@
 # ANY class/field name produces a silent load failure, so keep every string verbatim
 # from a real save.
 #
-# Required view (REVIEW.md R2-5 / media/README.md):
+# Required view (REVIEW.md  / media/README.md):
 #   - Fixed Frame: map            (ENU; the node publishes paths in this frame)
 #   - Path on /nmpc_node/predicted_path   — orange (255;128;0), width 0.02
 #   - Path on /nmpc_node/reference_path   — green (0;255;0), width 0.02

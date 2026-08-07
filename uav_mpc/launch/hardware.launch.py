@@ -1,4 +1,4 @@
-"""Real-hardware bring-up. See .deepseek/08_LAUNCH.md §8.4 and docs/HARDWARE_BRINGUP.md.
+"""Real-hardware bring-up. and docs/HARDWARE_BRINGUP.md.
 
 Same NMPC node as SITL; Gazebo and PX4-SITL are replaced by real drivers. Two backends:
 
@@ -27,12 +27,10 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import ExecuteProcess
 from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
-from launch.actions import RegisterEventHandler
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.event_handlers import OnProcessStart
 
 PACKAGE = "uav_mpc"
 
@@ -65,6 +63,7 @@ def _preflight_check(context) -> list:
     # --- battery ----------------------------------------------------------------------------
     try:
         from px4_msgs.msg import BatteryStatus  # noqa: F401  (name varies; guarded below)
+
         battery_topic = "/fmu/out/battery_status"
     except ImportError:
         battery_topic = None
@@ -82,9 +81,7 @@ def _preflight_check(context) -> list:
         node.destroy_subscription(sub)
         if samples:
             v = samples[-1]
-            results["battery"] = (
-                "PASS" if v >= 10.5 else "FAIL",
-                f"{v:.2f} V (limit 10.5 V)")
+            results["battery"] = ("PASS" if v >= 10.5 else "FAIL", f"{v:.2f} V (limit 10.5 V)")
         else:
             results["battery"] = ("FAIL", f"no battery messages on {battery_topic}")
 
@@ -93,9 +90,7 @@ def _preflight_check(context) -> list:
         from px4_msgs.msg import VehicleStatus
     except ImportError:
         results["ekf"] = ("WARN", "px4_msgs unavailable — EKF check skipped")
-        vehicle_status = None
     else:
-        vehicle_status = VehicleStatus
         got = []
 
         def _on_status(msg):
@@ -107,17 +102,19 @@ def _preflight_check(context) -> list:
             rclpy.spin_once(node, timeout_sec=0.1)
         node.destroy_subscription(sub)
         if not got:
-            results["ekf"] = ("FAIL", "no vehicle_status within 10 s — is the uXRCE-DDS "
-                                      "agent running?")
+            results["ekf"] = (
+                "FAIL",
+                "no vehicle_status within 10 s — is the uXRCE-DDS " "agent running?",
+            )
         else:
             s = got[-1]
             nav_ok = int(s.nav_state) != 11  # 11 = NAVIGATION_STATE_FAILSAFE
-            results["ekf"] = ("PASS" if nav_ok else "FAIL",
-                              f"nav_state={s.nav_state}")
+            results["ekf"] = ("PASS" if nav_ok else "FAIL", f"nav_state={s.nav_state}")
 
     # --- mocap age (only when the mission needs external vision) ------------------------------
     if mocap_required:
         from geometry_msgs.msg import PoseStamped
+
         stamps = []
 
         def _on_pose(msg):
@@ -130,8 +127,10 @@ def _preflight_check(context) -> list:
         node.destroy_subscription(sub)
         if stamps:
             age = (node.get_clock().now() - stamps[-1]).nanoseconds * 1e-9
-            results["mocap"] = ("PASS" if age < 0.1 else "FAIL",
-                                f"age {age * 1e3:.0f} ms (limit 100 ms)")
+            results["mocap"] = (
+                "PASS" if age < 0.1 else "FAIL",
+                f"age {age * 1e3:.0f} ms (limit 100 ms)",
+            )
         else:
             results["mocap"] = ("FAIL", f"no poses on {mocap_topic} within {timeout} s")
 
@@ -150,25 +149,35 @@ def generate_launch_description() -> LaunchDescription:
     share_dir = get_package_share_directory(PACKAGE)
 
     declared_arguments = [
-        DeclareLaunchArgument("backend", default_value="px4",
-                              description="'px4' | 'crazyflie'"),
-        DeclareLaunchArgument("airframe", default_value="x500",
-                              description="defaults per backend: x500 / crazyflie21"),
+        DeclareLaunchArgument("backend", default_value="px4", description="'px4' | 'crazyflie'"),
+        DeclareLaunchArgument(
+            "airframe", default_value="x500", description="defaults per backend: x500 / crazyflie21"
+        ),
         DeclareLaunchArgument(
             "uri",
             default_value="serial:///dev/ttyUSB0:921600",
             description="px4: serial:///dev/ttyUSB0:921600 or udp://:14540; "
-                        "crazyflie: radio://0/80/2M/E7E7E7E7E7"),
-        DeclareLaunchArgument("mocap", default_value="false",
-                              description="start the mocap republisher (vehicle_visual_odometry)"),
+            "crazyflie: radio://0/80/2M/E7E7E7E7E7",
+        ),
+        DeclareLaunchArgument(
+            "mocap",
+            default_value="false",
+            description="start the mocap republisher (vehicle_visual_odometry)",
+        ),
         DeclareLaunchArgument("mocap_topic", default_value="/vrpn_client_node/uav/pose"),
         DeclareLaunchArgument("geofence_radius", default_value="3.0", description="[m]"),
         DeclareLaunchArgument("max_altitude", default_value="2.5", description="[m]"),
         # SAFETY: these defaults are a safety property — do not flip them.
-        DeclareLaunchArgument("auto_arm", default_value="false",
-                              description="MUST stay false on hardware; arming is human"),
-        DeclareLaunchArgument("auto_activate", default_value="false",
-                              description="MUST stay false on hardware; operator activates"),
+        DeclareLaunchArgument(
+            "auto_arm",
+            default_value="false",
+            description="MUST stay false on hardware; arming is human",
+        ),
+        DeclareLaunchArgument(
+            "auto_activate",
+            default_value="false",
+            description="MUST stay false on hardware; operator activates",
+        ),
     ]
 
     backend = LaunchConfiguration("backend")
@@ -178,9 +187,6 @@ def generate_launch_description() -> LaunchDescription:
     mocap_topic = LaunchConfiguration("mocap_topic")
     auto_arm = LaunchConfiguration("auto_arm")
     auto_activate = LaunchConfiguration("auto_activate")
-
-    # The airframe follows the backend unless overridden.
-    airframe_resolved = LaunchConfiguration("airframe", default="")
 
     actions = []
 
@@ -197,7 +203,8 @@ def generate_launch_description() -> LaunchDescription:
         # --- mocap republisher: PoseStamped (ENU) -> px4_msgs/VehicleOdometry (NED) ------------
         if mocap:
             mocap_bridge = Node(
-                package="uav_mpc", executable="mocap_bridge",  # small helper, see below
+                package="uav_mpc",
+                executable="mocap_bridge",  # small helper, see below
                 parameters=[{"mocap_topic": mocap_topic}],
                 output="screen",
                 condition=IfCondition(mocap),
@@ -210,15 +217,14 @@ def generate_launch_description() -> LaunchDescription:
         raise NotImplementedError(
             "backend:=crazyflie needs the §8.4 adapter node (NmpcStatus -> crazyflie_ros2 "
             "setpoint at 100 Hz, zero-thrust latch on stale status) plus crazyflie_ros2 "
-            "installed. Implement the adapter in this repo (see .deepseek/08_LAUNCH.md §8.4 "
-            "and docs/HARDWARE_BRINGUP.md) before using this backend.")
+            "installed. Implement the adapter in this repo before using this backend."
+        )
     else:
         raise RuntimeError(f"unknown backend '{backend}' (expected 'px4' or 'crazyflie')")
 
     # --- the NMPC node itself (inactive; preflight + human activation) -------------------------
     nmpc_only = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(share_dir, "launch", "nmpc_only.launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(share_dir, "launch", "nmpc_only.launch.py")),
         launch_arguments={
             "airframe": airframe,
             "auto_arm": auto_arm,

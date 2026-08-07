@@ -34,7 +34,7 @@
     the optional PX4 backend as well (select it with `vehicle_interface:=px4`).
 
     Declaring it here — even as an <exec_depend> — would make `rosdep install` and the buildfarm
-    fail on Lyrical, which is exactly what this design avoids. See .deepseek/07_NODE.md §7.10.
+    fail on Lyrical, which is exactly what this design avoids.
   -->
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
@@ -48,7 +48,17 @@
   <exec_depend>rviz2</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_cmake_clang_format</test_depend>
+  <!--
+    uncrustify and clang-format are COMPETING formatters, not complementary ones.
+    `ament_lint_common` ships uncrustify + cpplint and deliberately omits clang-format. With
+    both enabled on clang-format 21 they disagree irreconcilably — `{ return x; }` vs
+    `{return x;}`, and `template <T>` vs `template<T>` — so criterion A9 ("all linters clean")
+    was unsatisfiable by construction. It went unnoticed only because the clang-format deb had
+    never been installed, so the linter silently never ran.
+
+    uncrustify is kept: it is the ROS 2 standard and the code already conforms to it.
+    `.clang-format` is retained at the repo root as an EDITOR aid only — it is not a gate.
+  -->
   <test_depend>ament_cmake_cpplint</test_depend>
   <test_depend>ament_cmake_uncrustify</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>

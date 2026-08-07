@@ -1,10 +1,10 @@
 # Builds the workspace from clean in a ROS 2 Lyrical Luth container and runs the unit tests.
 # This is the badge on the README; it must be green or the repo has failed its first filter.
-# See .deepseek/14_CI.md §14.1.
+#
 #
 # PEP 668 applies: Ubuntu 26.04 refuses bare `pip install` into the system interpreter, so a
-# venv created with --system-site-packages carries requirements.txt (see
-# .deepseek/02_ENVIRONMENT.md §2.3). We do NOT reach for --break-system-packages.
+# venv created with --system-site-packages carries requirements.txt. We do NOT reach for
+# --break-system-packages.
 
 name: colcon build
 
@@ -66,31 +66,16 @@ jobs:
           restore-keys: colcon-
 
       # ------------------------------------------------------------------ px4_msgs -------------
-      - name: Verify px4_msgs branch matches docker_smoke_test.yml
-        run: |
-          pinned=$(grep -m1 '^[[:space:]]*PX4_VERSION:' \
-            .github/workflows/docker_smoke_test.yml \
-            | sed -E 's/.*PX4_VERSION:[[:space:]]*"([^"]+)".*/\1/')
-          if [ -z "$pinned" ] || [ "$pinned" != "$PX4_VERSION" ]; then
-            echo "::error::PX4_VERSION drift: colcon_build.yml=$PX4_VERSION " \
-                 "docker_smoke_test.yml=$pinned. Version skew between px4_msgs and PX4 is the" \
-                 "#1 cause of a silent no-messages failure — pin both in one place (§14.1)."
-            exit 1
-          fi
-          echo "PX4_VERSION $PX4_VERSION consistent with docker_smoke_test.yml"
+      # the primary build deliberately does NOT clone px4_msgs.
+      #
+      # px4_msgs has no Lyrical Luth release, so the configuration every user actually
+      # gets is 'acados ON, px4_msgs absent, generic vehicle backend'. That is what this
+      # job must prove works. Cloning px4_msgs here would (a) test a configuration nobody
+      # has and (b) fail outright the moment px4_msgs does not build on this distro,
+      # taking the primary gate down with it.
+      #
+      # The PX4 backend belongs in a separate, non-blocking job once px4_msgs ships.
 
-      - name: Clone px4_msgs at the PX4 version
-        run: |
-          set -euxo pipefail
-          if [ -d src/px4_msgs ]; then
-            echo "px4_msgs restored from cache"
-          else
-            git clone --depth 1 --branch "$PX4_VERSION" \
-              https://github.com/PX4/px4_msgs.git src/px4_msgs
-          fi
-          git -C src/px4_msgs rev-parse HEAD
-
-      # ------------------------------------------------------------------ deps ------------------
       - name: Install system dependencies
         run: |
           set -euxo pipefail
@@ -122,8 +107,12 @@ jobs:
             git clone --recursive https://github.com/acados/acados.git "$ACADOS_SOURCE_DIR"
             git -C "$ACADOS_SOURCE_DIR" checkout "$(grep -E '^[0-9a-f]{40}$' \
               src/uav-mpc/codegen/ACADOS_COMMIT | head -1)"
+            # qpOASES OFF — its bundled C does not compile with GCC 15 (Ubuntu
+            # 26.04); C23 rejects the old pointer conversions in QProblem.c. It is also
+            # unused: generate_acados_solver.py selects PARTIAL_CONDENSING_HPIPM.
+            # Do not turn this back on 'for completeness'.
             cmake -S "$ACADOS_SOURCE_DIR" -B "$ACADOS_SOURCE_DIR/build" \
-              -DACADOS_WITH_QPOASES=ON \
+              -DACADOS_WITH_QPOASES=OFF \
               -DACADOS_WITH_OSQP=OFF \
               -DACADOS_WITH_HPIPM=ON \
               -DACADOS_WITH_OPENMP=ON \

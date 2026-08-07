@@ -7,8 +7,8 @@
 #   - A6 (SITL hover assertions):  scripts/assert_hover.py.
 #
 # Editing a number here is the ONLY way to change a criterion — grep for a duplicated magic
-# constant in a test or script is a REVIEW finding. See .deepseek/01_OVERVIEW.md §1.3 for the
-# A-criteria table and .deepseek/14_CI.md §14.1 for the "solve-time noise" exception below.
+# constant in a test or script is a REVIEW finding. for the
+# A-criteria table. The "solve-time noise" exception is documented in colcon_build.yml.
 
 # A2 — NMPC solve-time budget at 100 Hz (median / p99 over 10k warm-started solves).
 # The p99 is the gate: a 100 Hz loop that misses once per second is broken. These are the

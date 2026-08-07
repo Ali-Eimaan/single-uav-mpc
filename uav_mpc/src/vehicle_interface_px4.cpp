@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ali-Eimaan.
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// PX4 / uXRCE-DDS vehicle backend. See .deepseek/07_NODE.md §7.10-§7.11.
+// PX4 / uXRCE-DDS vehicle backend. §7.10-§7.11.
 //
 // ============================================================================================
 // THIS FILE IS COMPILED ONLY WHEN px4_msgs IS AVAILABLE.

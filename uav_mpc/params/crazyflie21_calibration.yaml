@@ -27,8 +27,8 @@ airframe:
   thrust_coeff: 2.88e-08      # [N/(rad/s)^2]  # Förster (2015) MSc thesis
   torque_coeff: 7.24e-10      # [N m/(rad/s)^2]  # Förster (2015) MSc thesis
   max_rotor_speed: 2618.0     # [rad/s] ~25000 rpm  # datasheet
-  min_thrust_per_rotor: 0.001 # [N]  # UNVERIFIED — idle thrust estimate
-  max_thrust_per_rotor: 0.157 # [N] ~16 gf per motor  # derived from thrust_coeff
+  min_thrust_per_rotor: 0.001  # [N]  # UNVERIFIED — idle thrust estimate
+  max_thrust_per_rotor: 0.157  # [N] ~16 gf per motor  # derived from thrust_coeff
   rotor_time_constant: 0.015  # [s]  # UNVERIFIED — rough estimate, needs identification
 
   # Thrust-to-weight = 4 * 0.157 / (0.027 * 9.80665) = 2.37.

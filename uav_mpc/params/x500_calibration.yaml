@@ -28,11 +28,11 @@ airframe:
   # --- propulsion ----------------------------------------------------------------------------
   # T_i = thrust_coeff * omega_i^2 ,  Q_i = torque_coeff * omega_i^2
   thrust_coeff: 8.54858e-06   # [N/(rad/s)^2]  motorConstant in the SITL SDF  # SDF
-  torque_coeff: 1.3677728e-07 # [N m/(rad/s)^2] = thrust_coeff * momentConstant(0.016)  # derived from thrust_coeff
+  torque_coeff: 1.3677728e-07  # [N m/(rad/s)^2] = thrust_coeff * momentConstant(0.016)  # derived from thrust_coeff
   max_rotor_speed: 1000.0     # [rad/s]  # SDF
   min_thrust_per_rotor: 0.5   # [N] keep the props spinning  # UNVERIFIED — idle thrust not in SDF
   max_thrust_per_rotor: 8.55  # [N] = thrust_coeff * max_rotor_speed^2  # derived
-  rotor_time_constant: 0.0125 # [s] first-order motor+ESC lag  # UNVERIFIED — rough estimate, needs identification
+  rotor_time_constant: 0.0125  # [s] first-order motor+ESC lag  # UNVERIFIED — rough estimate, needs identification
 
   # Thrust-to-weight = 4 * 8.55 / (2.0 * 9.80665) = 1.74. Adequate for the 3 m / 5 s figure-8.
 
