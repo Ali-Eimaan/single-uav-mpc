@@ -36,6 +36,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    # REQUIRED. Jobs that run inside a container get /bin/sh (dash) by default,
+    # and `. /opt/ros/$ROS_DISTRO/setup.bash` is full of bash-isms — it fails with
+    # "Bad substitution" / "builtin: not found" and the job dies at step 1.
+    shell: bash
+
 env:
   # Pinned in ONE place: this file. colcon_build.yml mirrors PX4_VERSION and verifies the
   # mirror cannot drift (see its "Verify px4_msgs branch" step). px4_msgs MUST match PX4.

@@ -18,6 +18,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    # REQUIRED. Jobs that run inside a container get /bin/sh (dash) by default,
+    # and `. /opt/ros/$ROS_DISTRO/setup.bash` is full of bash-isms — it fails with
+    # "Bad substitution" / "builtin: not found" and the job dies at step 1.
+    shell: bash
+
 env:
   # The single source of truth for the PX4 version is docker_smoke_test.yml. This value is a
   # mirror; a step below verifies the two cannot drift.
@@ -84,7 +91,7 @@ jobs:
             build-essential cmake git \
             python3-pip python3-venv \
             python3-colcon-common-extensions python3-rosdep \
-            libeigen3-dev
+            libeigen3-dev libyaml-cpp-dev
           . /opt/ros/$ROS_DISTRO/setup.bash
           rosdep init || true
           rosdep update
@@ -196,7 +203,7 @@ jobs:
           apt-get install -y -qq --no-install-recommends \
             build-essential cmake git \
             python3-colcon-common-extensions \
-            libeigen3-dev
+            libeigen3-dev libyaml-cpp-dev
 
       - name: colcon build with UAV_MPC_WITH_ACADOS=OFF
         run: |

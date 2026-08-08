@@ -1,8 +1,8 @@
 # Fast, no-build lint gate. Should finish in under two minutes so it is the first thing a
 # contributor sees fail.
 #
-# Python lint settings live in the committed setup.cfg (flake8) and .yamllint — no inline
-# flags, or the local run and the CI run drift apart.
+# Python lint settings live in the committed setup.cfg (flake8) and pyproject.toml (black);
+# YAML settings in .yamllint. No inline flags — otherwise the local run and the CI run drift.
 
 name: format check
 
@@ -16,6 +16,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    # REQUIRED for the container job. A job with `container:` gets /bin/sh (dash) by default,
+    # and `. /opt/ros/$ROS_DISTRO/setup.bash` is full of bash-isms — under dash it fails with
+    # "Bad substitution" / "builtin: not found" and the job dies on its first step.
+    shell: bash
+
 jobs:
   cpp:
     name: C++ (ament linters)
@@ -26,60 +33,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The ros-lyrical-ament-* linter debs may not be published yet (ENVIRONMENT §2.1 risk
-      # V3). Try the debs first; if they are absent, install the ament linters from source
-      # into the PEP 668 venv so the gate survives until the debs land.
+      # This job runs INSIDE the container as root, so apt-get needs no sudo (and sudo is not
+      # installed). The runner-hosted jobs below are the opposite — see their steps.
+      #
+      # The ros-lyrical-ament-* linter debs are published, so install them and fail loudly if
+      # that ever stops being true. A previous from-source fallback created a venv without
+      # installing python3-venv first and died on "ensurepip is not available"; a fallback that
+      # cannot run is worse than no fallback.
       - name: Install ament linters
         run: |
           set -euxo pipefail
           apt-get update -qq
-          apt-get install -y -qq \
-            ros-${ROS_DISTRO}-ament-cmake-clang-format \
+          apt-get install -y -qq --no-install-recommends \
             ros-${ROS_DISTRO}-ament-cmake-cpplint \
-            ros-${ROS_DISTRO}-ament-cmake-uncrustify \
-            || true
-          if command -v ament_uncrustify >/dev/null 2>&1; then
-            echo "ament linters installed from debs"
-          else
-            echo "ros-${ROS_DISTRO} linter debs not published yet (risk V3) — installing from source"
-            python3 -m venv --system-site-packages /opt/venv
-            . /opt/venv/bin/activate
-            for branch in "${ROS_DISTRO}" rolling; do
-              if git ls-remote --heads https://github.com/ament/ament_lint.git "$branch" \
-                  | grep -q "refs/heads/$branch"; then
-                git clone --depth 1 --branch "$branch" \
-                  https://github.com/ament/ament_lint.git /tmp/ament_lint
-                break
-              fi
-            done
-            [ -d /tmp/ament_lint ] || { echo "::error::cannot clone ament_lint"; exit 1; }
-            pip install \
-              /tmp/ament_lint/ament_clang_format \
-              /tmp/ament_lint/ament_cpplint \
-              /tmp/ament_lint/ament_uncrustify
-            echo "/opt/venv/bin" >> "$GITHUB_PATH"
-          fi
+            ros-${ROS_DISTRO}-ament-cmake-uncrustify
+          command -v ament_cpplint
+          command -v ament_uncrustify
 
-      # clang-format is deliberately NOT a gate. It and uncrustify are competing
-      # formatters and disagree irreconcilably on clang-format 21 (`{ return x; }` vs
-      # `{return x;}`, `template <T>` vs `template<T>`). ament_lint_common ships uncrustify +
-      # cpplint and omits clang-format for exactly this reason. `.clang-format` is kept as an
-      # editor aid only. Do not re-add a clang-format step here.
+      # clang-format is deliberately NOT a gate. It and uncrustify are competing formatters and
+      # disagree irreconcilably on clang-format 21 (`{ return x; }` vs `{return x;}`,
+      # `template <T>` vs `template<T>`). ament_lint_common ships uncrustify + cpplint and omits
+      # clang-format for exactly this reason. `.clang-format` is kept as an editor aid only.
+      # Do not re-add a clang-format step here.
 
       - name: cpplint
         run: |
           set -euxo pipefail
+          source /opt/ros/${ROS_DISTRO}/setup.bash
           ament_cpplint --linelength 100 uav_mpc/src uav_mpc/include uav_mpc/test
 
       - name: uncrustify (fail on any diff, print the fix)
         run: |
-          set -euxo pipefail
+          set -euo pipefail
+          source /opt/ros/${ROS_DISTRO}/setup.bash
           if ! ament_uncrustify --linelength 100 \
               uav_mpc/src uav_mpc/include uav_mpc/test; then
-            ament_uncrustify --linelength 100 --reformat \
-              uav_mpc/src uav_mpc/include uav_mpc/test
-            git diff -- uav_mpc || true
-            echo "::error::uncrustify would reformat the sources above."
+            echo "::error::uncrustify would reformat the sources above. Fix with:"
+            echo "  ament_uncrustify --linelength 100 --reformat uav_mpc/src uav_mpc/include uav_mpc/test"
             exit 1
           fi
 
@@ -92,20 +82,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
-      # This job uses actions/setup-python, so PEP 668 does not apply here (ENVIRONMENT §2.3).
-      # Black and flake8 are pinned in requirements.txt — take the versions from there rather
+
+      # This job uses actions/setup-python, so PEP 668 does not apply and no venv is needed.
+      # black and flake8 are pinned in requirements.txt — read the versions from there rather
       # than restating them, so the two cannot drift.
+      #
+      # The sed must stop at the first space or '#'. requirements.txt carries trailing
+      # verification comments, and `flake8==7.3.0          # verified ...` is not a valid
+      # requirement specifier — pip rejects it outright.
       - name: Install pinned linters
         run: |
-          pip install \
-            "black==$(sed -n 's/^black==//p' requirements.txt)" \
-            "flake8==$(sed -n 's/^flake8==//p' requirements.txt)"
+          set -euo pipefail
+          black_version=$(sed -n 's/^black==\([^ #]*\).*/\1/p' requirements.txt)
+          flake8_version=$(sed -n 's/^flake8==\([^ #]*\).*/\1/p' requirements.txt)
+          echo "resolved: black==${black_version} flake8==${flake8_version}"
+          python -m pip install --quiet "black==${black_version}" "flake8==${flake8_version}"
+
       - name: black --check --diff
         run: |
+          set -euo pipefail
+          # Line length comes from pyproject.toml ([tool.black] line-length = 100).
           black --check --diff \
             codegen/ analysis/ scripts/ uav_mpc/launch/ uav_mpc/test/
+
       - name: flake8
         run: |
+          set -euo pipefail
           # Settings live in the committed setup.cfg; no inline flags.
           flake8
 
@@ -115,16 +117,21 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+
+      # This job runs on the RUNNER, not in a container: the user is not root, so every
+      # apt-get needs sudo. (The cpp job above is the reverse — root, no sudo available.)
       - name: yamllint
         run: |
-          pip install yamllint
+          set -euo pipefail
+          python -m pip install --quiet yamllint
           # Relaxed line-length rule lives in the committed .yamllint, not inline.
-          # acceptance_criteria.yaml is load-bearing, so lint it with the rest.
           yamllint -c .yamllint uav_mpc/config/ uav_mpc/params/ acceptance_criteria.yaml
+
       - name: xmllint package.xml
         run: |
           set -euo pipefail
-          apt-get update -qq && apt-get install -y -qq libxml2-utils
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxml2-utils
           # Well-formedness is checked ALWAYS and needs no network.
           xmllint --noout uav_mpc/package.xml
           # Schema validation is best-effort: download.ros.org is not always reachable from a
@@ -137,6 +144,7 @@ jobs:
           else
             echo "::notice::schema unreachable — well-formedness checked only"
           fi
+
       - name: Count TODO and UNVERIFIED markers
         run: |
           set -euo pipefail
@@ -147,10 +155,10 @@ jobs:
           {
             echo "## Outstanding markers"
             echo ""
-            echo "- \`TODO\`: **$todos**"
-            echo "- \`UNVERIFIED\`: **$unverified**"
+            echo "- TODO: **${todos}**"
+            echo "- UNVERIFIED: **${unverified}**"
             echo ""
             echo "UNVERIFIED matters more than TODO: an unimplemented function is visible,"
             echo "an unverified constant is not."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "TODO=$todos UNVERIFIED=$unverified"
+          echo "TODO=${todos} UNVERIFIED=${unverified}"
