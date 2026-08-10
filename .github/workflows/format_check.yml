@@ -42,11 +42,18 @@ jobs:
       # cannot run is worse than no fallback.
       - name: Install ament linters
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends \
             ros-${ROS_DISTRO}-ament-cmake-cpplint \
             ros-${ROS_DISTRO}-ament-cmake-uncrustify
+          # The binaries install under /opt/ros/$ROS_DISTRO/bin, which is NOT on PATH
+          # until setup.bash is sourced -- Actions bypasses the image entrypoint that
+          # would normally do it. Source first, then prove they are reachable.
+          source /opt/ros/${ROS_DISTRO}/setup.bash
           command -v ament_cpplint
           command -v ament_uncrustify
 
@@ -58,13 +65,19 @@ jobs:
 
       - name: cpplint
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           source /opt/ros/${ROS_DISTRO}/setup.bash
           ament_cpplint --linelength 100 uav_mpc/src uav_mpc/include uav_mpc/test
 
       - name: uncrustify (fail on any diff, print the fix)
         run: |
-          set -euo pipefail
+          set -eo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           source /opt/ros/${ROS_DISTRO}/setup.bash
           if ! ament_uncrustify --linelength 100 \
               uav_mpc/src uav_mpc/include uav_mpc/test; then
@@ -118,8 +131,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # This job runs on the RUNNER, not in a container: the user is not root, so every
-      # apt-get needs sudo. (The cpp job above is the reverse — root, no sudo available.)
+      # actions/setup-python gives this job its own interpreter. Without it, `pip install` hits
+      # the runner's SYSTEM python, which Ubuntu 26.04 marks externally-managed (PEP 668) and
+      # refuses — and the unversioned `python` alias may not exist at all. Both failure modes
+      # disappear here, and it costs a few seconds.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
       - name: yamllint
         run: |
           set -euo pipefail
@@ -127,6 +146,8 @@ jobs:
           # Relaxed line-length rule lives in the committed .yamllint, not inline.
           yamllint -c .yamllint uav_mpc/config/ uav_mpc/params/ acceptance_criteria.yaml
 
+      # This job runs on the RUNNER, not in a container: the user is not root, so apt-get
+      # needs sudo. (The cpp job above is the reverse — root, and sudo is not installed.)
       - name: xmllint package.xml
         run: |
           set -euo pipefail

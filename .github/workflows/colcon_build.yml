@@ -26,9 +26,9 @@ defaults:
     shell: bash
 
 env:
-  # The single source of truth for the PX4 version is docker_smoke_test.yml. This value is a
-  # mirror; a step below verifies the two cannot drift.
-  PX4_VERSION: "v1.16.0"   # UNVERIFIED — see docker_smoke_test.yml
+  # No PX4_VERSION here on purpose. This workflow no longer touches px4_msgs (see the note on
+  # the build job below), so mirroring the pin would only create a second copy to forget to
+  # update. The single source of truth is docker_smoke_test.yml.
   ACADOS_SOURCE_DIR: ${{ github.workspace }}/acados
 
 jobs:
@@ -85,7 +85,10 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends \
             build-essential cmake git \
@@ -146,13 +149,19 @@ jobs:
 
       - name: rosdep install
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           . /opt/ros/$ROS_DISTRO/setup.bash
           rosdep install --from-paths src -y --ignore-src
 
       - name: colcon build (Release)
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           . /opt/ros/$ROS_DISTRO/setup.bash
           export ACADOS_SOURCE_DIR
           colcon build --event-handlers console_direct+ \
@@ -168,7 +177,10 @@ jobs:
           UAV_MPC_SOLVE_P99_BUDGET_MS: "5.0"
           UAV_MPC_SOLVE_MEDIAN_BUDGET_MS: "3.0"
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           . /opt/ros/$ROS_DISTRO/setup.bash
           export ACADOS_SOURCE_DIR
           export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
@@ -207,7 +219,10 @@ jobs:
 
       - name: colcon build with UAV_MPC_WITH_ACADOS=OFF
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           . /opt/ros/$ROS_DISTRO/setup.bash
           # Guards the abstraction boundary: if an acados header leaks out of
           # acados_wrapper.cpp, this job is what catches it. If it starts failing, fix the

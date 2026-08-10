@@ -16,19 +16,20 @@ name: docker smoke test
 
 # MANUAL TRIGGER ONLY, deliberately.
 #
-# This job cannot pass yet and must not run automatically:
-#   *  — nothing bridges Gazebo to either vehicle backend. `sitl.launch.py` defaults to
-#     `vehicle_interface:=px4`, and px4_msgs has no Lyrical Luth release, so the node refuses
-#     to configure. There is no runnable simulation path.
-#   *  — `docker/Dockerfile.sitl` and the image-publishing workflow referenced below do
-#     not exist, so `SIM_IMAGE` cannot be pulled.
+# This job cannot pass yet and must not run automatically. Two things are missing:
+#
+#   1. NO GAZEBO BRIDGE — nothing connects Gazebo to either vehicle backend. `sitl.launch.py`
+#      defaults to `vehicle_interface:=px4`, and px4_msgs has no Lyrical Luth release, so the
+#      node refuses to configure. There is no runnable simulation path.
+#   2. NO SIM IMAGE — `docker/Dockerfile.sitl` and the image-publishing workflow referenced
+#      below do not exist, so `SIM_IMAGE` cannot be pulled.
 #
 # Running it on every push would guarantee a permanently red badge on the landing page, which
 # is worse than no badge: it trains everyone to ignore red. Acceptance criteria A6/A7 are
 # therefore openly UNMET rather than silently failing.
 #
-# RE-ENABLE the `push` / `pull_request` / `schedule` triggers in the same commit that closes
-#  and , and not before.
+# RE-ENABLE the `push` / `pull_request` / `schedule` triggers in the same commit that fixes
+# both of the above, and not before.
 on:
   workflow_dispatch:
 
@@ -44,8 +45,8 @@ defaults:
     shell: bash
 
 env:
-  # Pinned in ONE place: this file. colcon_build.yml mirrors PX4_VERSION and verifies the
-  # mirror cannot drift (see its "Verify px4_msgs branch" step). px4_msgs MUST match PX4.
+  # Pinned in ONE place: this file. No other workflow mirrors PX4_VERSION — colcon_build.yml
+  # deliberately builds without px4_msgs. px4_msgs MUST match the PX4 release named here.
   # NOTE: Lyrical Luth is a young distro. Every pin below is a forward-looking guess — verify
   # each one against the release notes before trusting it.
   PX4_VERSION: "v1.16.0"     # UNVERIFIED — confirm which release supports Gazebo Jetty
@@ -70,7 +71,10 @@ jobs:
 
       - name: Run the hover scenario
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           source /opt/ros/$ROS_DISTRO/setup.bash
           export ACADOS_SOURCE_DIR
           export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
@@ -100,7 +104,10 @@ jobs:
 
       - name: Assert hover metrics
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           source /opt/ros/$ROS_DISTRO/setup.bash
           # The assertions live in scripts/assert_hover.py so they run locally too.
           # Thresholds below are the §14.3 acceptance criteria (relaxed vs unit tests).
@@ -133,7 +140,10 @@ jobs:
 
       - name: Run the figure-8 scenario
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           source /opt/ros/$ROS_DISTRO/setup.bash
           export ACADOS_SOURCE_DIR
           export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
@@ -159,7 +169,10 @@ jobs:
 
       - name: Assert figure-8 metrics
         run: |
-          set -euxo pipefail
+          set -exo pipefail
+          # NOTE: no `-u`. ROS setup files reference unset variables
+          # (AMENT_TRACE_SETUP_FILES and friends), so `set -u` makes sourcing them abort
+          # with "unbound variable" before anything runs.
           source /opt/ros/$ROS_DISTRO/setup.bash
           # Looser position thresholds than hover: RMS < 0.25 m (§14.3).
           python src/uav-mpc/scripts/assert_hover.py "$bag" \
