@@ -115,8 +115,17 @@ jobs:
           else
             mkdir -p "$ACADOS_SOURCE_DIR"
             git clone --recursive https://github.com/acados/acados.git "$ACADOS_SOURCE_DIR"
-            git -C "$ACADOS_SOURCE_DIR" checkout "$(grep -E '^[0-9a-f]{40}$' \
-              src/uav-mpc/codegen/ACADOS_COMMIT | head -1)"
+            # Resolved into a variable rather than inlined into `git checkout $(...)`. Under
+            # `pipefail` the old form had two ways to misbehave: grep exits 1 when the file
+            # holds no SHA, and `head -1` closing the pipe early makes grep exit 141
+            # (SIGPIPE). Either way the substitution yielded "" and git was handed an empty
+            # ref, failing with a message that pointed nowhere near the real cause.
+            commit=$(grep -E '^[0-9a-f]{40}$' src/uav-mpc/codegen/ACADOS_COMMIT | head -1 || true)
+            if [ -z "$commit" ]; then
+              echo "::error::codegen/ACADOS_COMMIT contains no 40-character commit SHA"
+              exit 1
+            fi
+            git -C "$ACADOS_SOURCE_DIR" checkout "$commit"
             # qpOASES OFF — its bundled C does not compile with GCC 15 (Ubuntu
             # 26.04); C23 rejects the old pointer conversions in QProblem.c. It is also
             # unused: generate_acados_solver.py selects PARTIAL_CONDENSING_HPIPM.

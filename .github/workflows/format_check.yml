@@ -171,8 +171,27 @@ jobs:
           set -euo pipefail
           # A progress meter, not a gate. --exclude-dir=.github is required or this grep
           # pattern would match the workflow file it lives in.
-          todos=$(grep -rnI "TODO" --exclude-dir=.git --exclude-dir=.github . | wc -l)
-          unverified=$(grep -rnI "UNVERIFIED" --exclude-dir=.git --exclude-dir=.github . | wc -l)
+          #
+          # count_marker exists because `grep` exits 1 when it finds NOTHING, and this step
+          # runs under `set -e -o pipefail` — so a CLEAN repo failed the job. Not
+          # hypothetical: the TODO count reached zero and took this step down with it.
+          # A count of 0 is a success, not an error. grep's rc>=2 IS a real error (bad
+          # path, unreadable file) and must still fail, so the two are kept distinct.
+          count_marker() {
+            local out rc=0
+            out=$(grep -rnI "$1" --exclude-dir=.git --exclude-dir=.github .) || rc=$?
+            if [ "$rc" -ge 2 ]; then
+              echo "::error::grep failed while counting '$1' (exit ${rc})" >&2
+              return "$rc"
+            fi
+            if [ -z "$out" ]; then
+              echo 0
+            else
+              printf '%s\n' "$out" | wc -l
+            fi
+          }
+          todos=$(count_marker "TODO")
+          unverified=$(count_marker "UNVERIFIED")
           {
             echo "## Outstanding markers"
             echo ""
