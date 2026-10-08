@@ -82,7 +82,7 @@ fails `on_configure` with instructions rather than degrading silently.
 Build (no `px4_msgs` needed):
 
 ```bash
-mkdir -p ~/ws/src && cd ~/ws/src && git clone https://github.com/Ali-Eimaan/single-uav-mpc.git
+mkdir -p ~/ws/src && cd ~/ws/src && git clone https://github.com/Ali-Eimaan/single-uav-mpc
 ```
 
 ```bash
