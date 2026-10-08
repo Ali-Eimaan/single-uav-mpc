@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software in your research, please cite it as below."
-title: uav-mpc
+title: single-uav-mpc
 abstract: >-
   Real-time nonlinear MPC for a quadrotor on ROS 2 Lyrical Luth, using an
   acados-generated SQP-RTI solver. Speaks standard ROS 2 messages by default;
@@ -13,8 +13,8 @@ authors:
 version: 0.1.0
 date-released: 2026-08-06
 license: BSD-3-Clause
-url: https://github.com/Ali-Eimaan/uav-mpc
-repository-code: https://github.com/Ali-Eimaan/uav-mpc
+url: https://github.com/Ali-Eimaan/single-uav-mpc
+repository-code: https://github.com/Ali-Eimaan/single-uav-mpc
 keywords:
   - ros2
   - mpc
@@ -27,4 +27,4 @@ references:
     relationship: is-derivative-of
     scope: >-
       The OCP structure and the differential-flatness-based reference generation
-      in uav-mpc carry over to this distributed MPC-CBF swarm controller.
+      in single-uav-mpc carry over to this distributed MPC-CBF swarm controller.

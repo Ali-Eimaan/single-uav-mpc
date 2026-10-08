@@ -12,7 +12,7 @@
 
   <maintainer email="ali.eimaan@icloud.com">Ali-Eimaan</maintainer>
   <license>BSD-3-Clause</license>
-  <url type="repository">https://github.com/Ali-Eimaan/uav-mpc</url>
+  <url type="repository">https://github.com/Ali-Eimaan/single-uav-mpc</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
