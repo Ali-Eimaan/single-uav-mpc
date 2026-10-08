@@ -1,11 +1,11 @@
-# uav-mpc
+# single-uav-mpc
 
 Real-time nonlinear MPC for a quadrotor on ROS 2 Lyrical Luth, using an acados-generated
 SQP-RTI solver. Speaks **standard ROS 2 messages** by default; PX4/uXRCE-DDS is an optional
 backend.
 
-[![colcon build](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/colcon_build.yml)
-[![format check](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml/badge.svg)](https://github.com/Ali-Eimaan/uav-mpc/actions/workflows/format_check.yml)
+[![colcon build](https://github.com/Ali-Eimaan/single-uav-mpc/actions/workflows/colcon_build.yml/badge.svg)](https://github.com/Ali-Eimaan/single-uav-mpc/actions/workflows/colcon_build.yml)
+[![format check](https://github.com/Ali-Eimaan/single-uav-mpc/actions/workflows/format_check.yml/badge.svg)](https://github.com/Ali-Eimaan/single-uav-mpc/actions/workflows/format_check.yml)
 
 [![ROS 2 Lyrical Luth](https://img.shields.io/badge/ROS%202-Lyrical%20Luth-22314E?logo=ros&logoColor=white)](https://docs.ros.org/)
 [![Ubuntu 26.04](https://img.shields.io/badge/Ubuntu-26.04%20LTS-E95420?logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/)
@@ -82,11 +82,11 @@ fails `on_configure` with instructions rather than degrading silently.
 Build (no `px4_msgs` needed):
 
 ```bash
-mkdir -p ~/ws/src && cd ~/ws/src && git clone https://github.com/Ali-Eimaan/uav-mpc.git
+mkdir -p ~/ws/src && cd ~/ws/src && git clone https://github.com/Ali-Eimaan/single-uav-mpc
 ```
 
 ```bash
-python3 -m venv --system-site-packages ~/.venvs/uavmpc && . ~/.venvs/uavmpc/bin/activate && pip install -r ~/ws/src/uav-mpc/requirements.txt
+python3 -m venv --system-site-packages ~/.venvs/uavmpc && . ~/.venvs/uavmpc/bin/activate && pip install -r ~/ws/src/single-uav-mpc/requirements.txt
 ```
 
 ```bash
