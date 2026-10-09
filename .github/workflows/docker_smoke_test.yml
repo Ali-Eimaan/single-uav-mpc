@@ -22,7 +22,7 @@ name: docker smoke test
 #      defaults to `vehicle_interface:=px4`, and px4_msgs has no Lyrical Luth release, so the
 #      node refuses to configure. There is no runnable simulation path.
 #   2. NO SIM IMAGE — `docker/Dockerfile.sitl` and the image-publishing workflow referenced
-#      below do not exist, so `SIM_IMAGE` cannot be pulled.
+#      below do not exist, so `ghcr.io/<owner>/<repo>:sitl-lyrical` cannot be pulled.
 #
 # Running it on every push would guarantee a permanently red badge on the landing page, which
 # is worse than no badge: it trains everyone to ignore red. Acceptance criteria A6/A7 are
@@ -52,7 +52,9 @@ env:
   PX4_VERSION: "v1.16.0"     # UNVERIFIED — confirm which release supports Gazebo Jetty
   GZ_VERSION: "jetty"        # UNVERIFIED — confirm the Lyrical pairing in REP-2000
   ROS_DISTRO: "lyrical"
-  SIM_IMAGE: ghcr.io/${{ github.repository }}:sitl-lyrical
+  # The sim image ref is inlined on each job's container.image as
+  # ghcr.io/${{ github.repository }}:sitl-lyrical. The env context is illegal there
+  # (GitHub rejects the workflow file before any job starts), so it is not a workflow env.
   # acados is layered into the sim image at /opt/acados (see the image-build workflow).
   ACADOS_SOURCE_DIR: /opt/acados
 
@@ -61,7 +63,7 @@ jobs:
     name: 10 s autonomous hover in SITL
     runs-on: ubuntu-latest   # the sim container determines the environment (risk V1)
     container:
-      image: ${{ env.SIM_IMAGE }}
+      image: ghcr.io/${{ github.repository }}:sitl-lyrical
       options: --shm-size=1g
     timeout-minutes: 60
     steps:
@@ -128,7 +130,7 @@ jobs:
     name: 2 laps of a figure-8 in SITL
     runs-on: ubuntu-latest   # the sim container determines the environment (risk V1)
     container:
-      image: ${{ env.SIM_IMAGE }}
+      image: ghcr.io/${{ github.repository }}:sitl-lyrical
       options: --shm-size=1g
     timeout-minutes: 60
     # Schedule + dispatch only, never on every push — keep the per-PR feedback loop short.
